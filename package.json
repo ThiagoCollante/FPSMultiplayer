@@ -1,7 +1,7 @@
 {
-  "name": "3d-multiplayer-render",
-  "version": "1.0.0",
-  "description": "3D FPS Room System",
+  "name": "multiplayer-fps",
+  "version": "2.0.0",
+  "description": "A proper 3D multiplayer FPS environment",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
