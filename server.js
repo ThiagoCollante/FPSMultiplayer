@@ -9,19 +9,37 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// State management
 const rooms = {};
+
+// Helper to send the current active rooms to clients
+function broadcastRoomList() {
+    const activeRooms = Object.keys(rooms).map(roomName => {
+        return {
+            name: roomName,
+            players: Object.keys(rooms[roomName]).length
+        };
+    });
+    io.emit('availableRooms', activeRooms);
+}
 
 io.on('connection', (socket) => {
     let currentRoom = null;
 
+    // Send the room list immediately when a user connects
+    broadcastRoomList();
+
     socket.on('joinRoom', (roomName) => {
+        // Leave previous room if any (safety catch)
+        if (currentRoom) {
+            socket.leave(currentRoom);
+            if (rooms[currentRoom]) delete rooms[currentRoom][socket.id];
+        }
+
         socket.join(roomName);
         currentRoom = roomName;
         
         if (!rooms[currentRoom]) rooms[currentRoom] = {};
         
-        // Initialize player with position, rotation, and a random color
         rooms[currentRoom][socket.id] = {
             id: socket.id,
             position: { x: 0, y: 1, z: 0 },
@@ -29,22 +47,19 @@ io.on('connection', (socket) => {
             color: Math.floor(Math.random() * 16777215) 
         };
 
-        // Send the new player the current room state
         socket.emit('currentPlayers', rooms[currentRoom]);
-        
-        // Tell everyone else in the room a new player joined
         socket.to(currentRoom).emit('newPlayer', rooms[currentRoom][socket.id]);
         
         console.log(`[+] ${socket.id} joined ${roomName}`);
+        
+        // Update everyone's server list
+        broadcastRoomList();
     });
 
-    // Handle movement and rotation updates
     socket.on('playerMovement', (movementData) => {
         if (currentRoom && rooms[currentRoom][socket.id]) {
             rooms[currentRoom][socket.id].position = movementData.position;
             rooms[currentRoom][socket.id].rotation = movementData.rotation;
-            
-            // Broadcast to all OTHER players in the room
             socket.to(currentRoom).emit('playerMoved', rooms[currentRoom][socket.id]);
         }
     });
@@ -53,7 +68,13 @@ io.on('connection', (socket) => {
         if (currentRoom && rooms[currentRoom]) {
             delete rooms[currentRoom][socket.id];
             io.to(currentRoom).emit('playerDisconnected', socket.id);
+            
+            // Clean up empty rooms
+            if (Object.keys(rooms[currentRoom]).length === 0) {
+                delete rooms[currentRoom];
+            }
             console.log(`[-] ${socket.id} disconnected`);
+            broadcastRoomList();
         }
     });
 });
