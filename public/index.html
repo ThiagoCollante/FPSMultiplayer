@@ -7,16 +7,22 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
-        /* Game UI */
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
         #room-info { position: absolute; top: 15px; left: 15px; color: #00ffcc; text-shadow: 1px 1px 2px #000; font-weight: bold; font-size: 1.2rem; }
         
+        /* NEW: Health UI */
+        #health-container { position: absolute; bottom: 20px; left: 20px; width: 300px; height: 30px; background: rgba(0,0,0,0.6); border: 2px solid #fff; border-radius: 5px; }
+        #health-bar { height: 100%; width: 100%; background: #00ffcc; transition: width 0.2s; }
+        #health-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-weight: bold; text-shadow: 1px 1px 2px #000; }
+
+        /* NEW: Death Screen */
+        #death-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 0, 0, 0.4); display: flex; justify-content: center; align-items: center; color: white; font-size: 5rem; font-weight: bold; text-transform: uppercase; letter-spacing: 10px; opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 5; }
+
         #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); opacity: 0.8; }
         #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00ffcc; }
         #crosshair::before { top: 0; left: 9px; width: 2px; height: 20px; }
         #crosshair::after { top: 9px; left: 0; width: 20px; height: 2px; }
 
-        /* Shared Menu Styles */
         .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; z-index: 10; pointer-events: auto; }
         .menu-box { background: rgba(0,0,0,0.8); padding: 30px; border-radius: 10px; border: 1px solid #333; width: 400px; text-align: center; box-shadow: 0 0 20px rgba(0, 255, 204, 0.1); }
         .btn { padding: 12px 20px; background: #00ffcc; color: #000; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; transition: 0.2s; width: 100%; margin-top: 10px; font-size: 1.1rem; }
@@ -24,7 +30,6 @@
         .btn-danger { background: #ff4444; color: white; }
         .btn-danger:hover { background: #cc0000; }
 
-        /* Main Menu Specific */
         #main-menu { background: rgba(15, 20, 25, 1); }
         #main-menu h1 { font-size: 3.5rem; color: #00ffcc; text-transform: uppercase; letter-spacing: 5px; margin-bottom: 30px; }
         .input-group { display: flex; margin-bottom: 20px; }
@@ -35,7 +40,6 @@
         .server-item { display: flex; justify-content: space-between; background: #2a2a35; padding: 10px 15px; margin-bottom: 8px; border-radius: 4px; align-items: center; }
         .server-item .btn { width: auto; padding: 6px 12px; margin-top: 0; font-size: 0.9rem; }
 
-        /* Pause Menu Specific */
         #pause-menu { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); display: none; }
         #pause-menu h2 { font-size: 2.5rem; margin-bottom: 10px; }
         .data-row { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 1.2rem; color: #aaa; }
@@ -47,7 +51,13 @@
     <div id="ui-layer">
         <div id="room-info">Room: <span id="current-room-name">...</span></div>
         <div id="crosshair"></div>
+        <div id="health-container">
+            <div id="health-bar"></div>
+            <div id="health-text">100 HP</div>
+        </div>
     </div>
+
+    <div id="death-screen">Wasted</div>
 
     <div id="main-menu" class="overlay">
         <h1>FPS Arena</h1>
@@ -87,6 +97,7 @@
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.y = 1.6;
+        scene.add(camera); // Add camera to scene so children render
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -105,10 +116,16 @@
         gridHelper.position.y = 0.01;
         scene.add(gridHelper);
 
+        // --- NEW: Gun Model attached to Camera ---
+        const gunGeo = new THREE.BoxGeometry(0.1, 0.1, 0.5);
+        const gunMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+        const myGun = new THREE.Mesh(gunGeo, gunMat);
+        myGun.position.set(0.3, -0.2, -0.4); // Positioned bottom-right relative to view
+        camera.add(myGun);
+
         const socket = io(); 
         const players = {}; 
         
-        // UI Elements
         const mainMenu = document.getElementById('main-menu');
         const pauseMenu = document.getElementById('pause-menu');
         const uiLayer = document.getElementById('ui-layer');
@@ -116,27 +133,38 @@
         const newRoomInput = document.getElementById('new-room-input');
         const currentRoomNameUI = document.getElementById('current-room-name');
         
-        // Game State
+        const healthBar = document.getElementById('health-bar');
+        const healthText = document.getElementById('health-text');
+        const deathScreen = document.getElementById('death-screen');
+        
         let inGame = false;
         let currentRoomString = "";
+        let myHealth = 100;
 
         const controls = new PointerLockControls(camera, document.body);
 
-        // Escape Key Logic
         controls.addEventListener('unlock', () => {
             uiLayer.style.display = 'none';
             if (inGame) {
-                // If playing, show pause menu
                 pauseMenu.style.display = 'flex';
                 document.getElementById('pause-room-display').innerText = currentRoomString;
-                document.getElementById('pause-players-display').innerText = Object.keys(players).length + 1; // Others + You
+                document.getElementById('pause-players-display').innerText = Object.keys(players).length + 1; 
             } else {
-                // If not playing, ensure main menu is showing
                 mainMenu.style.display = 'flex';
             }
         });
 
-        // UI Interactions
+        function updateMyHealth(hp) {
+            myHealth = hp;
+            healthBar.style.width = `${hp}%`;
+            healthText.innerText = `${hp} HP`;
+            if (hp <= 30) {
+                healthBar.style.background = '#ff4444';
+            } else {
+                healthBar.style.background = '#00ffcc';
+            }
+        }
+
         function enterGame(roomName) {
             if (!roomName.trim()) return;
             socket.emit('joinRoom', roomName);
@@ -144,6 +172,7 @@
             currentRoomNameUI.innerText = roomName;
             
             inGame = true;
+            updateMyHealth(100);
             mainMenu.style.display = 'none';
             pauseMenu.style.display = 'none';
             uiLayer.style.display = 'block';
@@ -161,18 +190,12 @@
             socket.emit('leaveRoom');
             inGame = false;
             currentRoomString = "";
-            
-            // Clear out remote players visually
             for (let id in players) { scene.remove(players[id]); delete players[id]; }
-            
-            // Reset player position
             camera.position.set(0, 1.6, 0);
-            
             pauseMenu.style.display = 'none';
             mainMenu.style.display = 'flex';
         });
 
-        // Server List Setup
         socket.on('availableRooms', (rooms) => {
             if (rooms.length === 0) {
                 serverListUI.innerHTML = '<p style="color: #888; text-align: center;">No active rooms.</p>';
@@ -188,22 +211,25 @@
             });
         });
 
-        // Rendering Other Players
-        function buildPlayerModel(color) {
+        function buildPlayerModel(id, color) {
             const group = new THREE.Group();
+            group.userData = { id: id }; // Important for identifying who was shot
+            
             const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.8, 1), new THREE.MeshStandardMaterial({ color: color }));
             body.position.y = 0.9;
             group.add(body);
+            
             const visor = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.2, 0.3), new THREE.MeshStandardMaterial({ color: 0x111111 }));
             visor.position.set(0, 1.5, -0.45);
             group.add(visor);
+            
             return group;
         }
 
         socket.on('currentPlayers', (serverPlayers) => {
             for (let id in players) { scene.remove(players[id]); delete players[id]; } 
             for (let id in serverPlayers) {
-                if (id === socket.id) continue;
+                if (id === socket.id) { updateMyHealth(serverPlayers[id].health); continue; }
                 addPlayer(serverPlayers[id]);
             }
         });
@@ -219,19 +245,107 @@
             if (players[id]) { scene.remove(players[id]); delete players[id]; }
         });
 
+        // --- NEW: Combat Networking ---
+        socket.on('updateHealth', (data) => {
+            if (data.id === socket.id) updateMyHealth(data.health);
+        });
+
+        socket.on('playerRespawned', (data) => {
+            if (data.id === socket.id) return; // Handled by youDied
+            if (players[data.id]) {
+                players[data.id].position.copy(data.position);
+            }
+        });
+
+        socket.on('youDied', () => {
+            // Death Animation
+            deathScreen.style.opacity = '1';
+            setTimeout(() => { deathScreen.style.opacity = '0'; }, 1500);
+            
+            // Reset player
+            updateMyHealth(100);
+            velocity.set(0,0,0);
+            camera.position.set(0, 1.6, 0);
+        });
+
+        socket.on('drawLaser', (data) => {
+            if (players[data.fromId]) {
+                const fromPos = new THREE.Vector3().copy(players[data.fromId].position);
+                fromPos.y += 1.5; // Roughly chest/gun height
+                createLaserVisual(fromPos, data.toPosition);
+            }
+        });
+
         function addPlayer(p) {
-            const playerModel = buildPlayerModel(p.color);
+            const playerModel = buildPlayerModel(p.id, p.color);
             playerModel.position.copy(p.position);
             playerModel.rotation.y = p.rotation.y;
             scene.add(playerModel);
             players[p.id] = playerModel;
         }
 
+        // --- NEW: Shooting Logic (Raycaster) ---
+        const raycaster = new THREE.Raycaster();
+        const centerScreen = new THREE.Vector2(0, 0);
+
+        function createLaserVisual(start, end) {
+            const material = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 2 });
+            const points = [start, new THREE.Vector3(end.x, end.y, end.z)];
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const line = new THREE.Line(geometry, material);
+            scene.add(line);
+            setTimeout(() => { scene.remove(line); }, 100); // Remove laser after 0.1s
+        }
+
+        window.addEventListener('mousedown', () => {
+            if (!controls.isLocked || !inGame) return;
+
+            // Recoil animation
+            myGun.position.z += 0.1;
+            setTimeout(() => { myGun.position.z -= 0.1; }, 50);
+
+            // Cast ray
+            raycaster.setFromCamera(centerScreen, camera);
+            
+            // Collect all meshes to check for hits
+            const hitTargets = [];
+            for (let id in players) { hitTargets.push(players[id]); }
+            
+            const intersects = raycaster.intersectObjects(hitTargets, true);
+            let hitPoint = null;
+
+            if (intersects.length > 0) {
+                // We hit something!
+                hitPoint = intersects[0].point;
+                let rootObject = intersects[0].object;
+                
+                // Find the parent group that has the user ID
+                while (rootObject.parent && rootObject.userData.id === undefined) {
+                    rootObject = rootObject.parent;
+                }
+
+                if (rootObject.userData.id) {
+                    socket.emit('registerHit', { targetId: rootObject.userData.id });
+                }
+            } else {
+                // We missed, draw the laser far out into the distance
+                raycaster.ray.at(50, hitPoint = new THREE.Vector3());
+            }
+
+            // Draw my laser
+            const gunWorldPos = new THREE.Vector3();
+            myGun.getWorldPosition(gunWorldPos);
+            createLaserVisual(gunWorldPos, hitPoint);
+
+            // Tell server to draw my laser for others
+            socket.emit('playerShot', { hitPoint: hitPoint });
+        });
+
         // --- Physics & Movement ---
         const moveState = { forward: false, backward: false, left: false, right: false };
         let canJump = false;
         const velocity = new THREE.Vector3(), direction = new THREE.Vector3();
-        const mass = 100.0; // Affects gravity pull
+        const gravity = 35.0; 
 
         document.addEventListener('keydown', (e) => {
             if (e.code === 'KeyW') moveState.forward = true;
@@ -239,7 +353,7 @@
             if (e.code === 'KeyS') moveState.backward = true;
             if (e.code === 'KeyD') moveState.right = true;
             if (e.code === 'Space' && canJump && controls.isLocked) {
-                velocity.y += 350; // Jump force
+                velocity.y = 12; 
                 canJump = false;
             }
         });
@@ -257,12 +371,9 @@
             const delta = (time - prevTime) / 1000;
 
             if (controls.isLocked) {
-                // Apply horizontal friction
                 velocity.x -= velocity.x * 10.0 * delta;
                 velocity.z -= velocity.z * 10.0 * delta;
-
-                // Apply gravity
-                velocity.y -= 9.8 * mass * delta; 
+                velocity.y -= gravity * delta; 
 
                 direction.z = Number(moveState.forward) - Number(moveState.backward);
                 direction.x = Number(moveState.right) - Number(moveState.left);
@@ -275,20 +386,21 @@
                 controls.moveRight(-velocity.x * delta);
                 controls.moveForward(-velocity.z * delta);
                 
-                // Apply vertical movement
                 camera.position.y += (velocity.y * delta);
 
-                // Floor collision check
                 if (camera.position.y < 1.6) {
                     velocity.y = 0;
                     camera.position.y = 1.6;
                     canJump = true;
                 }
 
-                // Send 3D position to server (send base of player, not eye height)
+                const camDir = new THREE.Vector3();
+                camera.getWorldDirection(camDir);
+                const pureYaw = Math.atan2(-camDir.x, -camDir.z); 
+
                 socket.emit('playerMovement', {
                     position: { x: camera.position.x, y: camera.position.y - 1.6, z: camera.position.z },
-                    rotation: { y: camera.rotation.y }
+                    rotation: { y: pureYaw }
                 });
             }
             prevTime = time;
