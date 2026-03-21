@@ -11,38 +11,35 @@
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
         #room-info { position: absolute; top: 15px; left: 15px; color: #00ffcc; text-shadow: 1px 1px 2px #000; font-weight: bold; font-size: 1.2rem; }
         
-        /* Crosshair */
         #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); opacity: 0.8; }
         #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00ffcc; }
         #crosshair::before { top: 0; left: 9px; width: 2px; height: 20px; }
         #crosshair::after { top: 9px; left: 0; width: 20px; height: 2px; }
 
-        /* Main Menu UI */
-        #main-menu {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(15, 20, 25, 0.9); display: flex; flex-direction: column;
-            justify-content: center; align-items: center; color: white; pointer-events: auto; z-index: 10;
-        }
+        /* Shared Menu Styles */
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; z-index: 10; pointer-events: auto; }
+        .menu-box { background: rgba(0,0,0,0.8); padding: 30px; border-radius: 10px; border: 1px solid #333; width: 400px; text-align: center; box-shadow: 0 0 20px rgba(0, 255, 204, 0.1); }
+        .btn { padding: 12px 20px; background: #00ffcc; color: #000; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; transition: 0.2s; width: 100%; margin-top: 10px; font-size: 1.1rem; }
+        .btn:hover { background: #00ccaa; }
+        .btn-danger { background: #ff4444; color: white; }
+        .btn-danger:hover { background: #cc0000; }
+
+        /* Main Menu Specific */
+        #main-menu { background: rgba(15, 20, 25, 1); }
         #main-menu h1 { font-size: 3.5rem; color: #00ffcc; text-transform: uppercase; letter-spacing: 5px; margin-bottom: 30px; }
-        
-        .menu-box { background: rgba(0,0,0,0.6); padding: 30px; border-radius: 10px; border: 1px solid #333; width: 400px; text-align: center; }
-        
-        /* Create Room Inputs */
         .input-group { display: flex; margin-bottom: 20px; }
         .input-group input { flex: 1; padding: 12px; border: none; background: #222; color: white; font-size: 1rem; border-radius: 4px 0 0 4px; outline: none; }
-        .input-group button { padding: 12px 20px; background: #00ffcc; color: #000; border: none; font-weight: bold; cursor: pointer; border-radius: 0 4px 4px 0; transition: 0.2s; }
-        .input-group button:hover { background: #00ccaa; }
-
-        /* Server List */
+        .input-group .btn { margin-top: 0; width: auto; border-radius: 0 4px 4px 0; }
+        
         .server-list { text-align: left; max-height: 200px; overflow-y: auto; margin-top: 10px; border-top: 1px solid #444; padding-top: 15px; }
         .server-item { display: flex; justify-content: space-between; background: #2a2a35; padding: 10px 15px; margin-bottom: 8px; border-radius: 4px; align-items: center; }
-        .server-item button { background: #444; color: white; border: none; padding: 6px 12px; cursor: pointer; border-radius: 4px; transition: 0.2s; }
-        .server-item button:hover { background: #00ffcc; color: black; }
-        
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #111; }
-        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        .server-item .btn { width: auto; padding: 6px 12px; margin-top: 0; font-size: 0.9rem; }
+
+        /* Pause Menu Specific */
+        #pause-menu { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); display: none; }
+        #pause-menu h2 { font-size: 2.5rem; margin-bottom: 10px; }
+        .data-row { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 1.2rem; color: #aaa; }
+        .data-row span { color: #fff; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -52,19 +49,26 @@
         <div id="crosshair"></div>
     </div>
 
-    <div id="main-menu">
+    <div id="main-menu" class="overlay">
         <h1>FPS Arena</h1>
         <div class="menu-box">
             <h3>Create a Room</h3>
             <div class="input-group">
                 <input type="text" id="new-room-input" placeholder="Enter Room Name...">
-                <button id="create-room-btn">Create</button>
+                <button class="btn" id="create-room-btn">Create</button>
             </div>
-            
             <h3>Active Servers</h3>
-            <div class="server-list" id="server-list">
-                <p style="color: #888; text-align: center;">Looking for rooms...</p>
-            </div>
+            <div class="server-list" id="server-list"></div>
+        </div>
+    </div>
+
+    <div id="pause-menu" class="overlay">
+        <div class="menu-box">
+            <h2>Game Paused</h2>
+            <div class="data-row">Room: <span id="pause-room-display">...</span></div>
+            <div class="data-row">Players: <span id="pause-players-display">1</span></div>
+            <button class="btn" id="resume-btn">Resume Game</button>
+            <button class="btn btn-danger" id="leave-btn">Leave Room</button>
         </div>
     </div>
 
@@ -77,7 +81,6 @@
         import { PointerLockControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
         import { io } from "https://cdn.socket.io/4.7.2/socket.io.esm.min.js";
 
-        // --- Scene & Rendering Setup ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x1a1a2e);
         scene.fog = new THREE.Fog(0x1a1a2e, 10, 50);
@@ -89,7 +92,6 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // --- Environment Lighting & Floor ---
         const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
         scene.add(hemiLight);
         
@@ -103,62 +105,90 @@
         gridHelper.position.y = 0.01;
         scene.add(gridHelper);
 
-        // --- Networking & UI Logic ---
         const socket = io(); 
         const players = {}; 
         
+        // UI Elements
         const mainMenu = document.getElementById('main-menu');
+        const pauseMenu = document.getElementById('pause-menu');
         const uiLayer = document.getElementById('ui-layer');
         const serverListUI = document.getElementById('server-list');
-        const createRoomBtn = document.getElementById('create-room-btn');
         const newRoomInput = document.getElementById('new-room-input');
         const currentRoomNameUI = document.getElementById('current-room-name');
+        
+        // Game State
+        let inGame = false;
+        let currentRoomString = "";
 
         const controls = new PointerLockControls(camera, document.body);
 
-        // When the player unlocks the mouse (hits ESC), show the menu again
+        // Escape Key Logic
         controls.addEventListener('unlock', () => {
-            mainMenu.style.display = 'flex';
             uiLayer.style.display = 'none';
+            if (inGame) {
+                // If playing, show pause menu
+                pauseMenu.style.display = 'flex';
+                document.getElementById('pause-room-display').innerText = currentRoomString;
+                document.getElementById('pause-players-display').innerText = Object.keys(players).length + 1; // Others + You
+            } else {
+                // If not playing, ensure main menu is showing
+                mainMenu.style.display = 'flex';
+            }
         });
 
-        // Function to join a room and start game
+        // UI Interactions
         function enterGame(roomName) {
             if (!roomName.trim()) return;
             socket.emit('joinRoom', roomName);
+            currentRoomString = roomName;
             currentRoomNameUI.innerText = roomName;
             
+            inGame = true;
             mainMenu.style.display = 'none';
+            pauseMenu.style.display = 'none';
             uiLayer.style.display = 'block';
-            controls.lock(); // Lock mouse to screen
+            controls.lock(); 
         }
 
-        // Handle UI clicks
-        createRoomBtn.addEventListener('click', () => enterGame(newRoomInput.value));
-        newRoomInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') enterGame(newRoomInput.value); });
+        document.getElementById('create-room-btn').addEventListener('click', () => enterGame(newRoomInput.value));
+        document.getElementById('resume-btn').addEventListener('click', () => {
+            pauseMenu.style.display = 'none';
+            uiLayer.style.display = 'block';
+            controls.lock();
+        });
+        
+        document.getElementById('leave-btn').addEventListener('click', () => {
+            socket.emit('leaveRoom');
+            inGame = false;
+            currentRoomString = "";
+            
+            // Clear out remote players visually
+            for (let id in players) { scene.remove(players[id]); delete players[id]; }
+            
+            // Reset player position
+            camera.position.set(0, 1.6, 0);
+            
+            pauseMenu.style.display = 'none';
+            mainMenu.style.display = 'flex';
+        });
 
-        // Receive active rooms from server and update UI
+        // Server List Setup
         socket.on('availableRooms', (rooms) => {
             if (rooms.length === 0) {
-                serverListUI.innerHTML = '<p style="color: #888; text-align: center;">No active rooms. Create one!</p>';
+                serverListUI.innerHTML = '<p style="color: #888; text-align: center;">No active rooms.</p>';
                 return;
             }
-            
             serverListUI.innerHTML = '';
             rooms.forEach(room => {
                 const div = document.createElement('div');
                 div.className = 'server-item';
-                div.innerHTML = `
-                    <span><strong>${room.name}</strong> (${room.players} players)</span>
-                    <button class="join-btn">Join</button>
-                `;
-                // Add click event to the join button
+                div.innerHTML = `<span><strong>${room.name}</strong> (${room.players})</span><button class="btn join-btn">Join</button>`;
                 div.querySelector('.join-btn').addEventListener('click', () => enterGame(room.name));
                 serverListUI.appendChild(div);
             });
         });
 
-        // --- Multi-player Rendering Logic ---
+        // Rendering Other Players
         function buildPlayerModel(color) {
             const group = new THREE.Group();
             const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.8, 1), new THREE.MeshStandardMaterial({ color: color }));
@@ -171,41 +201,47 @@
         }
 
         socket.on('currentPlayers', (serverPlayers) => {
-            for (let id in players) { scene.remove(players[id]); delete players[id]; } // Clear old
+            for (let id in players) { scene.remove(players[id]); delete players[id]; } 
             for (let id in serverPlayers) {
                 if (id === socket.id) continue;
                 addPlayer(serverPlayers[id]);
             }
         });
 
-        socket.on('newPlayer', (playerInfo) => addPlayer(playerInfo));
-        socket.on('playerMoved', (playerInfo) => {
-            if (players[playerInfo.id]) {
-                players[playerInfo.id].position.copy(playerInfo.position);
-                players[playerInfo.id].rotation.y = playerInfo.rotation.y;
+        socket.on('newPlayer', (p) => addPlayer(p));
+        socket.on('playerMoved', (p) => {
+            if (players[p.id]) {
+                players[p.id].position.copy(p.position);
+                players[p.id].rotation.y = p.rotation.y;
             }
         });
         socket.on('playerDisconnected', (id) => {
             if (players[id]) { scene.remove(players[id]); delete players[id]; }
         });
 
-        function addPlayer(playerInfo) {
-            const playerModel = buildPlayerModel(playerInfo.color);
-            playerModel.position.copy(playerInfo.position);
-            playerModel.rotation.y = playerInfo.rotation.y;
+        function addPlayer(p) {
+            const playerModel = buildPlayerModel(p.color);
+            playerModel.position.copy(p.position);
+            playerModel.rotation.y = p.rotation.y;
             scene.add(playerModel);
-            players[playerInfo.id] = playerModel;
+            players[p.id] = playerModel;
         }
 
-        // --- Movement & Animation Loop ---
+        // --- Physics & Movement ---
         const moveState = { forward: false, backward: false, left: false, right: false };
+        let canJump = false;
         const velocity = new THREE.Vector3(), direction = new THREE.Vector3();
+        const mass = 100.0; // Affects gravity pull
 
         document.addEventListener('keydown', (e) => {
             if (e.code === 'KeyW') moveState.forward = true;
             if (e.code === 'KeyA') moveState.left = true;
             if (e.code === 'KeyS') moveState.backward = true;
             if (e.code === 'KeyD') moveState.right = true;
+            if (e.code === 'Space' && canJump && controls.isLocked) {
+                velocity.y += 350; // Jump force
+                canJump = false;
+            }
         });
         document.addEventListener('keyup', (e) => {
             if (e.code === 'KeyW') moveState.forward = false;
@@ -221,8 +257,12 @@
             const delta = (time - prevTime) / 1000;
 
             if (controls.isLocked) {
+                // Apply horizontal friction
                 velocity.x -= velocity.x * 10.0 * delta;
                 velocity.z -= velocity.z * 10.0 * delta;
+
+                // Apply gravity
+                velocity.y -= 9.8 * mass * delta; 
 
                 direction.z = Number(moveState.forward) - Number(moveState.backward);
                 direction.x = Number(moveState.right) - Number(moveState.left);
@@ -234,9 +274,20 @@
 
                 controls.moveRight(-velocity.x * delta);
                 controls.moveForward(-velocity.z * delta);
+                
+                // Apply vertical movement
+                camera.position.y += (velocity.y * delta);
 
+                // Floor collision check
+                if (camera.position.y < 1.6) {
+                    velocity.y = 0;
+                    camera.position.y = 1.6;
+                    canJump = true;
+                }
+
+                // Send 3D position to server (send base of player, not eye height)
                 socket.emit('playerMovement', {
-                    position: { x: camera.position.x, y: 0, z: camera.position.z },
+                    position: { x: camera.position.x, y: camera.position.y - 1.6, z: camera.position.z },
                     rotation: { y: camera.rotation.y }
                 });
             }
