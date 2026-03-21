@@ -3,19 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Render Multiplayer</title>
+    <title>Proper 3D Multiplayer</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; pointer-events: none; text-shadow: 2px 2px 4px #000; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: white; border-radius: 50%; transform: translate(-50%, -50%); border: 1px solid black; }
-        #instructions { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; text-align: center; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; cursor: pointer; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; }
+        
+        /* UI Styling */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #room-info { position: absolute; top: 15px; left: 15px; color: #00ffcc; text-shadow: 1px 1px 2px #000; font-weight: bold; font-size: 1.2rem; }
+        
+        /* Enhanced Crosshair */
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
+            transform: translate(-50%, -50%); opacity: 0.8;
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: #00ffcc;
+        }
+        /* Vertical line */
+        #crosshair::before { top: 0; left: 9px; width: 2px; height: 20px; }
+        /* Horizontal line */
+        #crosshair::after { top: 9px; left: 0; width: 20px; height: 2px; }
+
+        /* Start Screen */
+        #menu {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 15, 20, 0.85); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: white; pointer-events: auto;
+        }
+        #play-btn {
+            padding: 15px 40px; font-size: 1.5rem; background: #00ffcc; color: #000;
+            border: none; cursor: pointer; font-weight: bold; border-radius: 5px; transition: 0.2s;
+        }
+        #play-btn:hover { background: #00ccaa; transform: scale(1.05); }
     </style>
 </head>
 <body>
 
-    <div id="ui">Room: <span id="room-display">Connecting...</span></div>
-    <div id="crosshair"></div>
-    <div id="instructions"><h1>Click to Play</h1><p>(W,A,S,D to walk, Mouse to look)</p></div>
+    <div id="ui-layer">
+        <div id="room-info">Room: <span id="room-name">...</span></div>
+        <div id="crosshair"></div>
+    </div>
+
+    <div id="menu">
+        <h1 style="font-size: 3rem; margin-bottom: 10px; color: #00ffcc;">FPS ARENA</h1>
+        <p style="margin-bottom: 30px;">WASD to Move | Mouse to Look</p>
+        <button id="play-btn">CLICK TO JOIN</button>
+    </div>
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
@@ -26,88 +59,174 @@
         import { PointerLockControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
         import { io } from "https://cdn.socket.io/4.7.2/socket.io.esm.min.js";
 
-        // --- 3D Scene Setup ---
+        // --- 1. Scene Setup ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x111122);
-        scene.fog = new THREE.FogExp2(0x111122, 0.05);
+        scene.background = new THREE.Color(0x1a1a2e);
+        scene.fog = new THREE.Fog(0x1a1a2e, 10, 50);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.y = 1.6; // Standard eye level
+
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // Environment
-        const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
-        scene.add(light);
-        const grid = new THREE.GridHelper(200, 50, 0xffffff, 0x444444);
-        scene.add(grid);
+        // --- 2. Environment ---
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+        scene.add(hemiLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(20, 50, 20);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
 
-        // --- Controls ---
+        // Grid Floor
+        const floorGeo = new THREE.PlaneGeometry(100, 100);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x222233, roughness: 0.8 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        
+        const gridHelper = new THREE.GridHelper(100, 100, 0x00ffcc, 0x444455);
+        gridHelper.position.y = 0.01;
+        scene.add(gridHelper);
+
+        // --- 3. Controls & Physics ---
         const controls = new PointerLockControls(camera, document.body);
-        const instructions = document.getElementById('instructions');
-        instructions.addEventListener('click', () => controls.lock());
-        controls.addEventListener('lock', () => instructions.style.display = 'none');
-        controls.addEventListener('unlock', () => instructions.style.display = 'block');
+        const menu = document.getElementById('menu');
+        const playBtn = document.getElementById('play-btn');
 
-        // --- Movement Logic ---
-        const keys = {};
-        document.addEventListener('keydown', (e) => keys[e.code] = true);
-        document.addEventListener('keyup', (e) => keys[e.code] = false);
+        playBtn.addEventListener('click', () => controls.lock());
+        controls.addEventListener('lock', () => menu.style.display = 'none');
+        controls.addEventListener('unlock', () => menu.style.display = 'flex');
 
-        // --- Networking ---
-        const socket = io(); // Automatically connects to the Render host
-        const otherPlayers = {};
+        const moveState = { forward: false, backward: false, left: false, right: false };
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+
+        document.addEventListener('keydown', (event) => {
+            switch (event.code) {
+                case 'KeyW': moveState.forward = true; break;
+                case 'KeyA': moveState.left = true; break;
+                case 'KeyS': moveState.backward = true; break;
+                case 'KeyD': moveState.right = true; break;
+            }
+        });
+        document.addEventListener('keyup', (event) => {
+            switch (event.code) {
+                case 'KeyW': moveState.forward = false; break;
+                case 'KeyA': moveState.left = false; break;
+                case 'KeyS': moveState.backward = false; break;
+                case 'KeyD': moveState.right = false; break;
+            }
+        });
+
+        // --- 4. Networking ---
+        const socket = io(); 
+        const players = {}; 
+
+        // Helper to build a player avatar (Body + Visor)
+        function buildPlayerModel(color) {
+            const group = new THREE.Group();
+            
+            // Body
+            const bodyGeo = new THREE.BoxGeometry(1, 1.8, 1);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: color });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.9;
+            body.castShadow = true;
+            group.add(body);
+
+            // Visor (Shows direction)
+            const visorGeo = new THREE.BoxGeometry(0.8, 0.2, 0.3);
+            const visorMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const visor = new THREE.Mesh(visorGeo, visorMat);
+            visor.position.set(0, 1.5, -0.45); // Placed high and on the front face
+            group.add(visor);
+
+            return group;
+        }
 
         socket.on('connect', () => {
-            const roomName = prompt("Enter Room ID:", "Lobby") || "Lobby";
-            socket.emit('joinRoom', roomName);
-            document.getElementById('room-display').innerText = roomName;
+            const room = prompt("Enter Room ID to join (e.g., Alpha, Beta):", "Alpha") || "Alpha";
+            socket.emit('joinRoom', room);
+            document.getElementById('room-name').innerText = room;
         });
 
-        socket.on('updatePlayers', (serverPlayers) => {
+        socket.on('currentPlayers', (serverPlayers) => {
             for (let id in serverPlayers) {
                 if (id === socket.id) continue;
-                
-                if (!otherPlayers[id]) {
-                    const mesh = new THREE.Mesh(
-                        new THREE.BoxGeometry(1, 2, 1),
-                        new THREE.MeshStandardMaterial({ color: serverPlayers[id].color })
-                    );
-                    scene.add(mesh);
-                    otherPlayers[id] = mesh;
-                }
-                otherPlayers[id].position.copy(serverPlayers[id].position);
-            }
-            
-            // Cleanup disconnected players
-            for (let id in otherPlayers) {
-                if (!serverPlayers[id]) {
-                    scene.remove(otherPlayers[id]);
-                    delete otherPlayers[id];
-                }
+                addPlayer(serverPlayers[id]);
             }
         });
 
-        // --- Main Loop ---
+        socket.on('newPlayer', (playerInfo) => {
+            addPlayer(playerInfo);
+        });
+
+        socket.on('playerMoved', (playerInfo) => {
+            if (players[playerInfo.id]) {
+                players[playerInfo.id].position.copy(playerInfo.position);
+                // Smooth rotation interpolation could go here, but strict assignment works for now
+                players[playerInfo.id].rotation.y = playerInfo.rotation.y;
+            }
+        });
+
+        socket.on('playerDisconnected', (id) => {
+            if (players[id]) {
+                scene.remove(players[id]);
+                delete players[id];
+            }
+        });
+
+        function addPlayer(playerInfo) {
+            const playerModel = buildPlayerModel(playerInfo.color);
+            playerModel.position.copy(playerInfo.position);
+            playerModel.rotation.y = playerInfo.rotation.y;
+            scene.add(playerModel);
+            players[playerInfo.id] = playerModel;
+        }
+
+        // --- 5. Main Game Loop ---
+        let prevTime = performance.now();
+        const clock = new THREE.Clock();
+
         function animate() {
             requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
 
             if (controls.isLocked) {
-                const speed = 0.15;
-                if (keys['KeyW']) controls.moveForward(speed);
-                if (keys['KeyS']) controls.moveForward(-speed);
-                if (keys['KeyA']) controls.moveRight(-speed);
-                if (keys['KeyD']) controls.moveRight(speed);
+                // Apply friction
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
 
-                // Send data to Render
-                socket.emit('move', { x: camera.position.x, y: camera.position.y - 1.6, z: camera.position.z });
+                direction.z = Number(moveState.forward) - Number(moveState.backward);
+                direction.x = Number(moveState.right) - Number(moveState.left);
+                direction.normalize(); 
+
+                const speed = 50.0;
+                if (moveState.forward || moveState.backward) velocity.z -= direction.z * speed * delta;
+                if (moveState.left || moveState.right) velocity.x -= direction.x * speed * delta;
+
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
+
+                // Networking: Send position AND rotation (Y-axis only)
+                socket.emit('playerMovement', {
+                    position: { x: camera.position.x, y: 0, z: camera.position.z }, // Model base is at y=0
+                    rotation: { y: camera.rotation.y } // Send where the camera is looking
+                });
             }
 
+            prevTime = time;
             renderer.render(scene, camera);
         }
 
         animate();
 
+        // Handle window resize
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
