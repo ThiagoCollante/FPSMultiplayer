@@ -47,9 +47,10 @@ io.on('connection', (socket) => {
         rooms[currentRoom].players[socket.id] = {
             id: socket.id,
             position: { x: 0, y: 0, z: 0 },
-            rotation: { y: 0 },
+            rotation: { x: 0, y: 0 },
             color: Math.floor(Math.random() * 16777215), 
-            health: 100
+            health: 100,
+            weaponIndex: 0 // Default to first weapon
         };
 
         // Send the current room state (including the map) to the new player
@@ -69,6 +70,19 @@ io.on('connection', (socket) => {
             rooms[currentRoom].players[socket.id].position = movementData.position;
             rooms[currentRoom].players[socket.id].rotation = movementData.rotation;
             socket.to(currentRoom).emit('playerMoved', rooms[currentRoom].players[socket.id]);
+        }
+    });
+
+    socket.on('changeWeapon', (weaponIndex) => {
+        if (currentRoom && rooms[currentRoom].players[socket.id]) {
+            rooms[currentRoom].players[socket.id].weaponIndex = weaponIndex;
+            socket.to(currentRoom).emit('weaponChanged', { id: socket.id, weaponIndex: weaponIndex });
+        }
+    });
+
+    socket.on('playerAction', (data) => {
+        if (currentRoom) {
+            socket.to(currentRoom).emit('playerAction', { id: socket.id, action: data.action });
         }
     });
 
