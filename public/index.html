@@ -82,10 +82,6 @@
                     <option value="2">Map 2: Warehouse</option>
                     <option value="3">Map 3: Labyrinth</option>
                 </select>
-                <select id="skin-select">
-                    <option value="default">Skin: Standard</option>
-                    <option value="facha">Skin: Facha (Gold)</option>
-                </select>
             </div>
             <button class="btn" id="create-room-btn">Create & Join</button>
             
@@ -120,7 +116,6 @@
         // --- SCENE SETUP ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x111115);
-        // Fog removed here
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.y = 1.7;
@@ -264,20 +259,19 @@
             }
         }
 
-        // --- DYNAMIC SKIN MATERIAL SYSTEM ---
+        // --- MATERIALS & WEAPON MODELS ---
         const flashCanvas = document.createElement('canvas'); flashCanvas.width = 128; flashCanvas.height = 128; const fCtx = flashCanvas.getContext('2d');
         const gradient = fCtx.createRadialGradient(64, 64, 0, 64, 64, 64); gradient.addColorStop(0, 'rgba(255, 255, 255, 1)'); gradient.addColorStop(0.2, 'rgba(255, 200, 50, 0.8)'); gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
         fCtx.fillStyle = gradient; fCtx.fillRect(0, 0, 128, 128); const flashTex = new THREE.CanvasTexture(flashCanvas);
 
-        function getMats(skinTheme) {
-            const isFacha = skinTheme === 'facha';
+        function getMats() {
             return {
-                polymerMat: new THREE.MeshStandardMaterial({ color: isFacha ? 0xdddddd : 0x1a1a1a, roughness: 0.8, metalness: 0.2 }),
-                metalMat: new THREE.MeshStandardMaterial({ color: isFacha ? 0xffd700 : 0x2c2f33, roughness: 0.3, metalness: 0.9 }),
-                darkMetalMat: new THREE.MeshStandardMaterial({ color: isFacha ? 0xb8860b : 0x0a0a0a, roughness: 0.5, metalness: 0.8 }),
+                polymerMat: new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8, metalness: 0.2 }),
+                metalMat: new THREE.MeshStandardMaterial({ color: 0x2c2f33, roughness: 0.3, metalness: 0.9 }),
+                darkMetalMat: new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.5, metalness: 0.8 }),
                 glassMat: new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.2, side: THREE.DoubleSide }),
                 dotMat: new THREE.MeshBasicMaterial({ color: 0xff0000 }),
-                woodMat: new THREE.MeshStandardMaterial({ color: isFacha ? 0x222222 : 0x3d2314, roughness: 0.9, metalness: 0.1 })
+                woodMat: new THREE.MeshStandardMaterial({ color: 0x3d2314, roughness: 0.9, metalness: 0.1 })
             };
         }
 
@@ -293,8 +287,8 @@
             const mesh = new THREE.Mesh(geometry, material); mesh.position.set(x, y, z); mesh.rotation.set(rx, ry, rz); group.add(mesh);
         }
 
-        function buildARModel(skinTheme = 'default') {
-            const mats = getMats(skinTheme);
+        function buildARModel() {
+            const mats = getMats();
             const grp = new THREE.Group();
             addPart(grp, new THREE.BoxGeometry(0.055, 0.08, 0.3), mats.metalMat, 0, 0.04, 0);
             addPart(grp, new THREE.BoxGeometry(0.045, 0.06, 0.2), mats.polymerMat, 0, -0.02, 0.02);
@@ -312,8 +306,8 @@
             attachFlash(grp, -0.55); return grp;
         }
 
-        function buildSniperModel(skinTheme = 'default') {
-            const mats = getMats(skinTheme);
+        function buildSniperModel() {
+            const mats = getMats();
             const grp = new THREE.Group();
             addPart(grp, new THREE.BoxGeometry(0.05, 0.08, 0.4), mats.darkMetalMat, 0, 0.04, 0);
             addPart(grp, new THREE.CylinderGeometry(0.012, 0.015, 0.8, 16), mats.metalMat, 0, 0.04, -0.4, Math.PI/2, 0, 0);
@@ -327,8 +321,8 @@
             attachFlash(grp, -0.85); return grp;
         }
 
-        function buildShotgunModel(skinTheme = 'default') {
-            const mats = getMats(skinTheme);
+        function buildShotgunModel() {
+            const mats = getMats();
             const grp = new THREE.Group();
             addPart(grp, new THREE.BoxGeometry(0.06, 0.09, 0.3), mats.darkMetalMat, 0, 0, 0);
             addPart(grp, new THREE.CylinderGeometry(0.015, 0.015, 0.5, 16), mats.darkMetalMat, 0, 0.02, -0.3, Math.PI/2, 0, 0);
@@ -339,8 +333,8 @@
             attachFlash(grp, -0.6, 0.02); return grp;
         }
 
-        function buildKnifeModel(skinTheme = 'default') {
-            const mats = getMats(skinTheme);
+        function buildKnifeModel() {
+            const mats = getMats();
             const grp = new THREE.Group();
             addPart(grp, new THREE.BoxGeometry(0.02, 0.12, 0.03), mats.polymerMat, 0, 0, 0);
             addPart(grp, new THREE.BoxGeometry(0.022, 0.02, 0.032), mats.darkMetalMat, 0, 0.03, 0);
@@ -369,7 +363,7 @@
         let gunGroup = null;
         let currentGunBasePos = new THREE.Vector3();
 
-        WEAPONS.forEach(w => w.model = w.buildFunc('default'));
+        WEAPONS.forEach(w => w.model = w.buildFunc());
 
         function equipWeapon(index) {
             if (isReloading || !inGame || index < 0 || index >= WEAPONS.length) return;
@@ -435,18 +429,15 @@
             if (decals.length > 100) { scene.remove(decals.shift()); }
         }
 
-        // --- ADDED PLAYER MODEL BUILDER WITH SKIN SUPPORT ---
-        function buildPlayerModel(id, baseColor, skinTheme = 'default') {
+        // --- PLAYER MODEL BUILDER ---
+        function buildPlayerModel(id, baseColor) {
             const pGroup = new THREE.Group();
             pGroup.userData = { id: id };
             
-            const isFacha = skinTheme === 'facha';
-            const matColor = isFacha ? 0xffd700 : baseColor; 
-            
             const pMat = new THREE.MeshStandardMaterial({ 
-                color: matColor, 
+                color: baseColor, 
                 roughness: 0.6, 
-                metalness: isFacha ? 0.8 : 0.1 
+                metalness: 0.1 
             });
             
             const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.4), pMat);
@@ -469,12 +460,11 @@
         const deathScreen = document.getElementById('death-screen');
         const roomInput = document.getElementById('new-room-input');
         const mapInput = document.getElementById('map-select');
-        const skinInput = document.getElementById('skin-select');
         
         let inGame = false; let myHealth = 100; let isMoving = false;
         let isShooting = false, isAiming = false, isReloading = false;
         let isSwinging = false; let swingStartTime = 0; let shotCount = 0; let lastFireTime = 0;
-        let isPaused = false; // Added pause flag
+        let isPaused = false; 
 
         const controls = new PointerLockControls(camera, document.body);
 
@@ -519,14 +509,8 @@
             const finalRoomName = roomName.trim() || "Lobby";
             roomInput.blur(); 
             mapInput.blur();
-            skinInput.blur();
 
-            const chosenSkin = skinInput.value;
-
-            WEAPONS.forEach(w => w.model = w.buildFunc(chosenSkin));
-            
-            // Send the chosen skin via websockets
-            socket.emit('joinRoom', { roomName: finalRoomName, mapId: mapId, skin: chosenSkin });
+            socket.emit('joinRoom', { roomName: finalRoomName, mapId: mapId });
             document.getElementById('current-room-name').innerText = finalRoomName;
             inGame = true; updateMyHealth(100); 
             WEAPONS.forEach(w => w.currentAmmo = w.maxAmmo);
@@ -568,14 +552,14 @@
             for (let id in players) { scene.remove(players[id]); delete players[id]; } 
             for (let id in data.players) {
                 if (id === socket.id) { updateMyHealth(data.players[id].health); continue; }
-                const pModel = buildPlayerModel(data.players[id].id, data.players[id].color, data.players[id].skin);
+                const pModel = buildPlayerModel(data.players[id].id, data.players[id].color);
                 pModel.position.copy(data.players[id].position); pModel.rotation.y = data.players[id].rotation.y;
                 scene.add(pModel); players[data.players[id].id] = pModel;
             }
         });
 
         socket.on('newPlayer', (p) => {
-            const pModel = buildPlayerModel(p.id, p.color, p.skin); 
+            const pModel = buildPlayerModel(p.id, p.color); 
             pModel.position.copy(p.position); pModel.rotation.y = p.rotation.y;
             scene.add(pModel); players[p.id] = pModel;
         });
@@ -806,7 +790,6 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            // Halt physics and game logic loop if we pause
             if (isPaused) return;
 
             const time = performance.now();
