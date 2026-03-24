@@ -115,7 +115,8 @@
 
         // --- SCENE SETUP ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87ceeb);
+        scene.background = new THREE.Color(0x111115);
+        scene.fog = new THREE.FogExp2(0x111115, 0.025);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.y = 1.7;
@@ -124,62 +125,149 @@
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
-        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
-        hemiLight.position.set(0, 20, 0); scene.add(hemiLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        dirLight.position.set(-10, 20, 10); scene.add(dirLight);
+        scene.add(new THREE.AmbientLight(0x404040, 0.4));
 
-        const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512; const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#3a3f44'; ctx.fillRect(0,0,512,512); ctx.fillStyle = '#4a5056'; ctx.fillRect(0,0,256,256); ctx.fillRect(256,256,256,256);
-        const floorTex = new THREE.CanvasTexture(canvas); floorTex.wrapS = THREE.RepeatWrapping; floorTex.wrapT = THREE.RepeatWrapping; floorTex.repeat.set(40, 40);
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.8 }));
-        floor.rotation.x = -Math.PI / 2; scene.add(floor);
+        // --- TEXTURE GENERATORS ---
+        const MAP_SIZE = 80;
 
-        // --- MAP GENERATION & COLLISION DATA ---
+        function createFloorTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512; const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#2a2a2e'; ctx.fillRect(0, 0, 512, 512);
+            for(let i=0; i<5000; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? '#333338' : '#222225';
+                ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+            }
+            ctx.strokeStyle = '#222'; ctx.lineWidth = 4; ctx.strokeRect(0, 0, 512, 512);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(MAP_SIZE/4, MAP_SIZE/4);
+            return tex;
+        }
+
+        function createCrateTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256; const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#7c5432'; ctx.fillRect(0, 0, 256, 256);
+            ctx.lineWidth = 12; ctx.strokeStyle = '#4a301a'; ctx.strokeRect(0, 0, 256, 256);
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(256, 256); ctx.moveTo(256, 0); ctx.lineTo(0, 256); ctx.stroke();
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(MAP_SIZE, MAP_SIZE), new THREE.MeshStandardMaterial({ map: createFloorTexture(), roughness: 0.9, metalness: 0.1 }));
+        floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
         const envGroup = new THREE.Group();
         scene.add(envGroup);
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9 });
-        let collisionBoxes = []; // Stores hitboxes for the walls
 
-        function createWall(w, h, d, x, y, z) { 
-            const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat); 
-            wall.position.set(x, y, z); 
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 1.0 });
+        const pillarMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.6, roughness: 0.4 });
+        const crateMat = new THREE.MeshStandardMaterial({ map: createCrateTexture(), roughness: 0.8 });
+        
+        let boundingBoxes = [];
+
+        function createWall(x, z, width, depth) { 
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(width, 15, depth), wallMat); 
+            wall.position.set(x, 15 / 2, z); 
+            wall.castShadow = true; wall.receiveShadow = true;
             envGroup.add(wall); 
-            
-            // Generate exact bounding box for collision detection
-            const box = new THREE.Box3().setFromObject(wall);
-            collisionBoxes.push(box);
+            wall.updateMatrixWorld();
+            boundingBoxes.push(new THREE.Box3().setFromObject(wall));
+        }
+
+        function spawnCrate(x, y, z, size, rot) {
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), crateMat);
+            mesh.scale.set(size, size, size);
+            mesh.position.set(x, y + size/2, z);
+            mesh.rotation.y = rot; 
+            mesh.castShadow = true; mesh.receiveShadow = true;
+            envGroup.add(mesh);
+            mesh.updateMatrixWorld();
+            boundingBoxes.push(new THREE.Box3().setFromObject(mesh));
+        }
+
+        // Pseudo-random generator so the warehouse generates EXACTLY the same for all players
+        let seed = 12345;
+        function seededRandom() {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280;
         }
 
         function loadMap(mapId) {
-            envGroup.clear(); // Remove old walls
-            collisionBoxes = []; // Clear old hitboxes
+            envGroup.clear();
+            boundingBoxes = [];
+            seed = 12345; 
 
-            // Outer Arena Walls (Common to all maps)
-            createWall(50, 10, 1, 0, 5, -25); 
-            createWall(50, 10, 1, 0, 5, 25);  
-            createWall(1, 10, 50, -25, 5, 0); 
-            createWall(1, 10, 50, 25, 5, 0);  
+            // Outer Walls
+            createWall(0, -MAP_SIZE/2, MAP_SIZE, 2); 
+            createWall(0, MAP_SIZE/2, MAP_SIZE, 2);  
+            createWall(-MAP_SIZE/2, 0, 2, MAP_SIZE); 
+            createWall(MAP_SIZE/2, 0, 2, MAP_SIZE);  
 
             mapId = parseInt(mapId);
+
             if (mapId === 2) {
                 // Map 2: The Warehouse
-                createWall(8, 6, 8, 10, 3, -10);
-                createWall(8, 6, 8, -10, 3, 10);
-                createWall(15, 6, 2, 0, 3, 0);
+                for (let x = -MAP_SIZE/2 + 10; x < MAP_SIZE/2; x += 20) {
+                    for (let z = -MAP_SIZE/2 + 10; z < MAP_SIZE/2; z += 20) {
+                        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 15, 1.5), pillarMat);
+                        mesh.position.set(x, 15/2, z);
+                        mesh.castShadow = true; mesh.receiveShadow = true;
+                        envGroup.add(mesh);
+                        mesh.updateMatrixWorld();
+                        boundingBoxes.push(new THREE.Box3().setFromObject(mesh));
+                    }
+                }
+
+                // Seeded Crates
+                for (let i = 0; i < 40; i++) {
+                    let x = (seededRandom() - 0.5) * (MAP_SIZE - 10);
+                    let z = (seededRandom() - 0.5) * (MAP_SIZE - 10);
+                    if (Math.abs(x) < 5 && Math.abs(z) < 5) continue; 
+                    let size = 2 + seededRandom() * 2;
+                    let stacks = 1 + Math.floor(seededRandom() * 3);
+                    let rot = (seededRandom() - 0.5) * 0.2;
+                    for(let s = 0; s < stacks; s++) {
+                        spawnCrate(x, s * size, z, size, rot);
+                    }
+                }
+
+                // Overhead Industrial Lights
+                const lightPositions = [[-20, -20], [20, -20], [-20, 20], [20, 20], [0, 0]];
+                lightPositions.forEach(pos => {
+                    const light = new THREE.PointLight(0xffddaa, 1.5, 40);
+                    light.position.set(pos[0], 14, pos[1]);
+                    light.castShadow = true;
+                    light.shadow.bias = -0.001;
+                    envGroup.add(light);
+
+                    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffddaa }));
+                    bulb.position.copy(light.position);
+                    envGroup.add(bulb);
+                });
+
             } else if (mapId === 3) {
                 // Map 3: Labyrinth
-                createWall(20, 6, 2, -10, 3, -10);
-                createWall(2, 6, 20, 10, 3, -10);
-                createWall(20, 6, 2, 10, 3, 10);
-                createWall(2, 6, 20, -10, 3, 10);
-                createWall(6, 6, 6, 0, 3, 0); // Center pillar
+                createWall(-10, -10, 20, 2);
+                createWall(10, -10, 2, 20);
+                createWall(10, 10, 20, 2);
+                createWall(-10, 10, 2, 20);
+                const centerMesh = new THREE.Mesh(new THREE.BoxGeometry(6, 15, 6), pillarMat);
+                centerMesh.position.set(0, 15/2, 0);
+                envGroup.add(centerMesh);
+                centerMesh.updateMatrixWorld();
+                boundingBoxes.push(new THREE.Box3().setFromObject(centerMesh));
+
+                const light = new THREE.PointLight(0xffffff, 1.5, 60);
+                light.position.set(0, 14, 0); envGroup.add(light);
+            } else {
+                // Map 1: Arena 
+                const light = new THREE.PointLight(0xffffff, 1.5, 100);
+                light.position.set(0, 14, 0); envGroup.add(light);
             }
         }
 
-        // --- WEAPONS AND ASSETS ---
+        // --- WEAPONS ASSETS ---
         const flashCanvas = document.createElement('canvas'); flashCanvas.width = 128; flashCanvas.height = 128; const fCtx = flashCanvas.getContext('2d');
         const gradient = fCtx.createRadialGradient(64, 64, 0, 64, 64, 64); gradient.addColorStop(0, 'rgba(255, 255, 255, 1)'); gradient.addColorStop(0.2, 'rgba(255, 200, 50, 0.8)'); gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
         fCtx.fillStyle = gradient; fCtx.fillRect(0, 0, 128, 128); const flashTex = new THREE.CanvasTexture(flashCanvas);
@@ -423,17 +511,15 @@
             list.innerHTML = '';
             rooms.forEach(room => {
                 const div = document.createElement('div'); div.className = 'server-item';
-                // Automatically join the specific map that room is playing on
                 div.innerHTML = `<span><strong>${room.name}</strong> (${room.players}) [Map ${room.mapId}]</span><button class="btn join-btn">Join</button>`;
                 div.querySelector('.join-btn').addEventListener('click', () => enterGame(room.name, room.mapId));
                 list.appendChild(div);
             });
         });
 
-        // Event for loading into the room
         socket.on('roomState', (data) => {
             clearDecals();
-            loadMap(data.mapId); // Generate the correct map!
+            loadMap(data.mapId); 
             
             for (let id in players) { scene.remove(players[id]); delete players[id]; } 
             for (let id in data.players) {
@@ -521,6 +607,14 @@
                 const sprayNDC = getSprayNDC(shotCount);
                 raycaster.setFromCamera(sprayNDC, camera);
 
+                if (!isAiming && p === 0) {
+                    const spreadPixels = (sprayNDC.y + Math.abs(sprayNDC.x)) * 1000 + 14;
+                    document.getElementById('ch-top').style.transform = `translateY(-${spreadPixels}px)`;
+                    document.getElementById('ch-bottom').style.transform = `translateY(${spreadPixels}px)`;
+                    document.getElementById('ch-left').style.transform = `translateX(-${spreadPixels}px)`;
+                    document.getElementById('ch-right').style.transform = `translateX(${spreadPixels}px)`;
+                }
+
                 const hitTargets = [floor, ...envGroup.children];
                 for (let id in players) { hitTargets.push(players[id]); }
 
@@ -601,29 +695,65 @@
         });
 
         // --- COLLISION ENGINE ---
-        // AABB (Axis-Aligned Bounding Box) physics checking
-        function checkCollision(pos) {
-            // Player Bounding Box (Radius 0.4, Height 2.0)
-            const pBox = new THREE.Box3(
-                new THREE.Vector3(pos.x - 0.4, pos.y - 1.5, pos.z - 0.4),
-                new THREE.Vector3(pos.x + 0.4, pos.y + 0.5, pos.z + 0.4)
-            );
-            
-            // Check environment walls
-            for (let i = 0; i < collisionBoxes.length; i++) {
-                if (pBox.intersectsBox(collisionBoxes[i])) return true;
+        function getCollisionBox(pos, radius, pMinY, pMaxY) {
+            let pMinX = pos.x - radius; let pMaxX = pos.x + radius;
+            let pMinZ = pos.z - radius; let pMaxZ = pos.z + radius;
+
+            for (let i = 0; i < boundingBoxes.length; i++) {
+                let b = boundingBoxes[i];
+                if (pMaxX > b.min.x && pMinX < b.max.x && pMaxZ > b.min.z && pMinZ < b.max.z && pMaxY > b.min.y && pMinY < b.max.y) return b;
             }
 
-            // Check other players
             for (let id in players) {
-                const otherBox = new THREE.Box3().setFromObject(players[id]);
-                if (pBox.intersectsBox(otherBox)) return true;
+                let pMesh = players[id];
+                let bMinX = pMesh.position.x - 0.6; let bMaxX = pMesh.position.x + 0.6;
+                let bMinZ = pMesh.position.z - 0.6; let bMaxZ = pMesh.position.z + 0.6;
+                let bMinY = pMesh.position.y - 1.0; let bMaxY = pMesh.position.y + 1.0;
+                if (pMaxX > bMinX && pMinX < bMaxX && pMaxZ > bMinZ && pMinZ < bMaxZ && pMaxY > bMinY && pMinY < bMaxY) {
+                    return new THREE.Box3(new THREE.Vector3(bMinX, bMinY, bMinZ), new THREE.Vector3(bMaxX, bMaxY, bMaxZ));
+                }
             }
-            return false;
+            return null;
+        }
+
+        function applyCollisions(pos, movement) {
+            let pMinY = pos.y - 1.7; let pMaxY = pos.y; const radius = 0.4; 
+
+            pos.x += movement.x;
+            let colX = getCollisionBox(pos, radius, pMinY, pMaxY);
+            if (colX) {
+                pos.x -= movement.x; 
+                if (movement.x > 0) pos.x = colX.min.x - radius - 0.001;
+                else if (movement.x < 0) pos.x = colX.max.x + radius + 0.001;
+            }
+
+            pos.z += movement.z;
+            let colZ = getCollisionBox(pos, radius, pMinY, pMaxY);
+            if (colZ) {
+                pos.z -= movement.z; 
+                if (movement.z > 0) pos.z = colZ.min.z - radius - 0.001;
+                else if (movement.z < 0) pos.z = colZ.max.z + radius + 0.001;
+            }
+
+            pos.y += movement.y;
+            pMinY = pos.y - 1.7; pMaxY = pos.y;
+            let colY = getCollisionBox(pos, radius, pMinY, pMaxY);
+
+            if (colY) {
+                if (movement.y < 0) { 
+                    pos.y = colY.max.y + 1.7; velocity.y = 0; canJump = true;
+                } else if (movement.y > 0) { 
+                    pos.y = colY.min.y - 0.001; velocity.y = 0;
+                }
+            } else if (pos.y < 1.7) { 
+                pos.y = 1.7; velocity.y = 0; canJump = true;
+            } else {
+                canJump = false; 
+            }
         }
 
         // --- RENDER LOOP ---
-        const moveSpeed = 50.0;
+        const moveSpeed = 12.0;
         const velocity = new THREE.Vector3(); const direction = new THREE.Vector3();
         let prevTime = performance.now();
         let currentCrosshairSpread = 14;
@@ -647,8 +777,8 @@
 
             document.getElementById('ch-top').style.transform = `translateY(-${currentCrosshairSpread}px)`;
             document.getElementById('ch-bottom').style.transform = `translateY(${currentCrosshairSpread}px)`;
-            document.getElementById('ch-left').style.transform = `translateY(-${currentCrosshairSpread}px) rotate(90deg)`;
-            document.getElementById('ch-right').style.transform = `translateY(${currentCrosshairSpread}px) rotate(90deg)`;
+            document.getElementById('ch-left').style.transform = `translateX(-${currentCrosshairSpread}px)`;
+            document.getElementById('ch-right').style.transform = `translateX(${currentCrosshairSpread}px)`;
             
             document.getElementById('crosshair').style.opacity = (isAiming && !currentWeapon.isMelee) ? '0' : '0.8';
 
@@ -666,36 +796,32 @@
                 flashLight.intensity -= delta * 30; 
             }
 
-            velocity.x -= velocity.x * 10.0 * delta; velocity.z -= velocity.z * 10.0 * delta; velocity.y -= 35.0 * delta; 
-
+            // PHYSICS
             isMoving = false;
             if (controls.isLocked) {
-                direction.z = Number(keys.w) - Number(keys.s); direction.x = Number(keys.d) - Number(keys.a); direction.normalize(); 
+                const inputVelocity = new THREE.Vector3(0, 0, 0);
+                if (keys.w) inputVelocity.z = -1;
+                if (keys.s) inputVelocity.z = 1;
+                if (keys.a) inputVelocity.x = -1;
+                if (keys.d) inputVelocity.x = 1;
+
+                inputVelocity.normalize();
                 const speed = isAiming ? moveSpeed * 0.4 : moveSpeed; 
-                if (keys.w || keys.s) velocity.z -= direction.z * speed * delta;
-                if (keys.a || keys.d) velocity.x -= direction.x * speed * delta;
-                
-                isMoving = direction.x !== 0 || direction.z !== 0;
-            }
+                inputVelocity.multiplyScalar(speed * delta);
 
-            // --- SLIDING COLLISION LOGIC ---
-            const oldPos = camera.position.clone();
-            
-            // Move X
-            controls.moveRight(-velocity.x * delta);
-            if (checkCollision(camera.position)) {
-                camera.position.x = oldPos.x; // Cancel X movement if blocked
-            }
-            
-            // Move Z
-            controls.moveForward(-velocity.z * delta);
-            if (checkCollision(camera.position)) {
-                camera.position.z = oldPos.z; // Cancel Z movement if blocked
-            }
+                let forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
+                let right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
 
-            // Handle Y (Gravity & Jumping) independently
-            camera.position.y += (velocity.y * delta);
-            if (camera.position.y < 1.7) { velocity.y = 0; camera.position.y = 1.7; canJump = true; }
+                let worldMovement = new THREE.Vector3(0, 0, 0);
+                worldMovement.addScaledVector(right, inputVelocity.x);
+                worldMovement.addScaledVector(forward, inputVelocity.z);
+
+                velocity.y -= 35.0 * delta; 
+                worldMovement.y = velocity.y * delta;
+
+                applyCollisions(camera.position, worldMovement);
+                isMoving = inputVelocity.x !== 0 || inputVelocity.z !== 0;
+            }
 
             let bobX = 0, bobY = 0;
             if (isMoving && !isReloading && canJump && !isAiming) {
