@@ -59,7 +59,7 @@ io.on('connection', (socket) => {
     socket.on('registerHit', (data) => {
         if (currentRoom && rooms[currentRoom][data.targetId]) {
             const target = rooms[currentRoom][data.targetId];
-            target.health -= 25; // 25 Damage per shot
+            target.health -= (data.damage || 25);
 
             if (target.health <= 0) {
                 // Player died
