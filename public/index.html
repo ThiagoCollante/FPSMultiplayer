@@ -90,7 +90,7 @@
             <div class="data-row">Room: <span id="pause-room-display">...</span></div>
             <div class="data-row">Players: <span id="pause-players-display">1</span></div>
             <p style="color:#aaa; font-size:0.9rem; margin-bottom:20px;">
-                <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move • <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Weapons<br><br>
+                <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move • <kbd>Scroll</kbd> or <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Weapons<br><br>
                 <kbd>L/R Click</kbd> Fire/Aim • <kbd>R</kbd> Reload
             </p>
             <button class="btn" id="resume-btn" style="background:#00ffcc; color:#000;">Resume Game</button>
@@ -110,7 +110,8 @@
         // --- SCENE SETUP ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87ceeb);
-        scene.fog = new THREE.Fog(0x87ceeb, 10, 50);
+        
+        // --- MODIFICATION: Removed scene.fog ---
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.y = 1.7;
@@ -157,9 +158,9 @@
         // --- ARSENAL FACTORY ---
         let flashSprite, flashLight; 
         
-        function attachFlash(group, zPos) {
+        function attachFlash(group, zPos, yPos = 0.04) {
             flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, transparent: true, opacity: 0 }));
-            flashSprite.scale.set(0.4, 0.4, 0.4); flashSprite.position.set(0, 0.04, zPos); 
+            flashSprite.scale.set(0.4, 0.4, 0.4); flashSprite.position.set(0, yPos, zPos); 
             flashLight = new THREE.PointLight(0xffaa00, 0, 5); flashLight.position.copy(flashSprite.position); 
             group.add(flashSprite); group.add(flashLight);
         }
@@ -217,19 +218,28 @@
 
         function buildShotgunModel() {
             const grp = new THREE.Group();
-            addPart(grp, new THREE.BoxGeometry(0.06, 0.1, 0.3), darkMetalMat, 0, 0.04, 0);
-            // Thick Barrel
-            addPart(grp, new THREE.CylinderGeometry(0.015, 0.015, 0.5, 16), darkMetalMat, 0, 0.05, -0.3, Math.PI/2, 0, 0);
-            // Tube under barrel
-            addPart(grp, new THREE.CylinderGeometry(0.012, 0.012, 0.45, 16), metalMat, 0, 0.01, -0.27, Math.PI/2, 0, 0);
-            // Pump Handle
-            addPart(grp, new THREE.CylinderGeometry(0.025, 0.025, 0.15, 12), polymerMat, 0, 0.01, -0.2, Math.PI/2, 0, 0);
-            // Wood Stock
-            addPart(grp, new THREE.BoxGeometry(0.045, 0.12, 0.25), woodMat, 0, 0, 0.25, Math.PI/24, 0, 0);
-            // Simple iron sight
-            addPart(grp, new THREE.BoxGeometry(0.01, 0.02, 0.01), metalMat, 0, 0.07, -0.5);
             
-            attachFlash(grp, -0.6);
+            // --- MODIFICATION: Lowered all components ---
+
+            // Body
+            addPart(grp, new THREE.BoxGeometry(0.06, 0.09, 0.3), darkMetalMat, 0, 0, 0);
+            
+            // Thick Barrel - Lowered
+            addPart(grp, new THREE.CylinderGeometry(0.015, 0.015, 0.5, 16), darkMetalMat, 0, 0.02, -0.3, Math.PI/2, 0, 0);
+            
+            // Tube under barrel - Lowered
+            addPart(grp, new THREE.CylinderGeometry(0.012, 0.012, 0.45, 16), metalMat, 0, -0.02, -0.27, Math.PI/2, 0, 0);
+            
+            // Pump Handle - Lowered
+            addPart(grp, new THREE.CylinderGeometry(0.025, 0.025, 0.15, 12), polymerMat, 0, -0.02, -0.2, Math.PI/2, 0, 0);
+            
+            // Wood Stock - Lowered and adjusted angle
+            addPart(grp, new THREE.BoxGeometry(0.045, 0.12, 0.3), woodMat, 0, -0.04, 0.25, Math.PI/20, 0, 0);
+            
+            // Iron sight - Kept high, moved forward
+            addPart(grp, new THREE.BoxGeometry(0.005, 0.02, 0.005), metalMat, 0, 0.045, -0.53);
+            
+            attachFlash(grp, -0.6, 0.02); // Flash aligned with lowered barrel
             return grp;
         }
 
@@ -237,27 +247,46 @@
         const WEAPONS = [
             { id: 1, name: "Assault Rifle", maxAmmo: 30, fireRate: 0.09, damage: 25, pellets: 1, auto: true, reloadTime: 1500, adsFov: 50, hipPos: new THREE.Vector3(0.2, -0.2, -0.35), adsPos: new THREE.Vector3(0, -0.11, -0.25), model: buildARModel() },
             { id: 2, name: "Sniper Rifle", maxAmmo: 5, fireRate: 1.5, damage: 100, pellets: 1, auto: false, reloadTime: 2500, adsFov: 15, hipPos: new THREE.Vector3(0.25, -0.2, -0.3), adsPos: new THREE.Vector3(0, -0.12, -0.15), model: buildSniperModel() },
-            { id: 3, name: "Shotgun", maxAmmo: 8, fireRate: 0.8, damage: 15, pellets: 8, auto: false, reloadTime: 2000, adsFov: 60, hipPos: new THREE.Vector3(0.25, -0.25, -0.35), adsPos: new THREE.Vector3(0, -0.09, -0.25), model: buildShotgunModel() }
+            
+            // --- MODIFICATION: Recalibrated Shotgun ADS Position ---
+            { id: 3, name: "Shotgun", maxAmmo: 8, fireRate: 0.8, damage: 15, pellets: 8, auto: false, reloadTime: 2000, adsFov: 60, hipPos: new THREE.Vector3(0.25, -0.25, -0.35), adsPos: new THREE.Vector3(0, -0.055, -0.2), model: buildShotgunModel() }
         ];
         
-        let currentWeapon = WEAPONS[0];
+        let currentWeaponIndex = 0; // MODIFICATION: Track index for scrolling
+        let currentWeapon = WEAPONS[currentWeaponIndex];
         let gunGroup = currentWeapon.model;
         let ammo = currentWeapon.maxAmmo;
         const currentGunBasePos = new THREE.Vector3().copy(currentWeapon.hipPos);
+        
+        flashSprite = gunGroup.children[gunGroup.children.length - 2];
+        flashLight = gunGroup.children[gunGroup.children.length - 1];
+
         camera.add(gunGroup);
 
         function equipWeapon(index) {
-            if (WEAPONS[index] === currentWeapon || isReloading) return;
+            if (isReloading || !inGame || index < 0 || index >= WEAPONS.length) return;
+            if (WEAPONS[index] === currentWeapon) return;
+            
             camera.remove(gunGroup);
-            currentWeapon = WEAPONS[index];
+            
+            currentWeaponIndex = index; // UPDATE INDEX
+            currentWeapon = WEAPONS[currentWeaponIndex];
             gunGroup = currentWeapon.model;
             
             flashSprite = gunGroup.children[gunGroup.children.length - 2];
             flashLight = gunGroup.children[gunGroup.children.length - 1];
 
             camera.add(gunGroup);
+            
+            // Reset state for new weapon
             ammo = currentWeapon.maxAmmo;
-            isShooting = false; isAiming = false; shotCount = 0;
+            isShooting = false; 
+            isAiming = false; 
+            shotCount = 0;
+            
+            camera.fov = 75; // Reset FOV instantly on swap
+            camera.updateProjectionMatrix();
+
             document.getElementById('weapon-info').innerText = currentWeapon.name;
             updateAmmoUI();
         }
@@ -528,6 +557,24 @@
                 document.getElementById('ch-right').style.transform = `translateX(0)`;
             }
             if (e.button === 2) isAiming = false;
+        });
+
+        // --- MODIFICATION: Added Scroll Wheel Listener ---
+        window.addEventListener('wheel', (e) => {
+            if (!controls.isLocked || !inGame || isReloading) return;
+
+            let nextIndex = currentWeaponIndex;
+            if (e.deltaY > 0) {
+                // Scroll Down -> Next Weapon
+                nextIndex = (currentWeaponIndex + 1) % WEAPONS.length;
+            } else if (e.deltaY < 0) {
+                // Scroll Up -> Previous Weapon
+                nextIndex = (currentWeaponIndex - 1 + WEAPONS.length) % WEAPONS.length;
+            }
+
+            if (nextIndex !== currentWeaponIndex) {
+                equipWeapon(nextIndex);
+            }
         });
 
         const keys = { w: false, a: false, s: false, d: false };
