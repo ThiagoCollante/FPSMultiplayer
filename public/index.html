@@ -28,16 +28,16 @@
         #ammo-counter { position: absolute; bottom: 30px; right: 40px; font-size: 2.5rem; color: white; font-weight: bold; text-shadow: 2px 2px 0px rgba(0,0,0,0.5); pointer-events: none; transition: opacity 0.2s; }
 
         .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; z-index: 15; pointer-events: auto; }
-        .menu-box { background: rgba(15, 20, 25, 0.95); padding: 30px; border-radius: 8px; border: 1px solid #333; width: 400px; text-align: center; box-shadow: 0 0 20px rgba(0, 0, 0, 0.5); }
+        .menu-box { background: rgba(15, 20, 25, 0.95); padding: 30px; border-radius: 8px; border: 1px solid #333; width: 450px; text-align: center; box-shadow: 0 0 20px rgba(0, 0, 0, 0.5); }
         .btn { padding: 12px 20px; background: #ff4655; color: #fff; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; transition: 0.2s; width: 100%; margin-top: 10px; font-size: 1.1rem; text-transform: uppercase; }
         .btn:hover { background: #ff5866; }
         
         #main-menu { background: rgba(10, 15, 20, 1); }
         #main-menu h1 { font-size: 3.5rem; color: #ff4655; text-transform: uppercase; letter-spacing: 5px; margin-bottom: 30px; text-shadow: 2px 2px 0px rgba(0,0,0,0.5); }
         
-        .input-group { display: flex; margin-bottom: 20px; }
-        .input-group input { flex: 1; padding: 12px; border: none; background: #222; color: white; font-size: 1rem; border-radius: 4px 0 0 4px; outline: none; }
-        .input-group .btn { margin-top: 0; width: auto; border-radius: 0 4px 4px 0; }
+        .input-group { display: flex; margin-bottom: 20px; gap: 5px; }
+        .input-group input { flex: 2; padding: 12px; border: none; background: #222; color: white; font-size: 1rem; border-radius: 4px; outline: none; }
+        .input-group select { flex: 1; padding: 12px; border: none; background: #333; color: white; font-size: 1rem; border-radius: 4px; outline: none; cursor: pointer;}
         
         .server-list { text-align: left; max-height: 200px; overflow-y: auto; margin-top: 10px; border-top: 1px solid #444; padding-top: 15px; }
         .server-item { display: flex; justify-content: space-between; background: #2a2a35; padding: 10px 15px; margin-bottom: 8px; border-radius: 4px; align-items: center; }
@@ -76,10 +76,16 @@
         <div class="menu-box">
             <h3>Create a Room</h3>
             <div class="input-group">
-                <input type="text" id="new-room-input" placeholder="Enter Room Name...">
-                <button class="btn" id="create-room-btn">Create</button>
+                <input type="text" id="new-room-input" placeholder="Room Name...">
+                <select id="map-select">
+                    <option value="1">1: Arena</option>
+                    <option value="2">2: Warehouse</option>
+                    <option value="3">3: Labyrinth</option>
+                </select>
             </div>
-            <h3>Active Servers</h3>
+            <button class="btn" id="create-room-btn">Create & Join</button>
+            
+            <h3 style="margin-top: 30px;">Active Servers</h3>
             <div class="server-list" id="server-list"></div>
         </div>
     </div>
@@ -131,12 +137,49 @@
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.8 }));
         floor.rotation.x = -Math.PI / 2; scene.add(floor);
 
+        // --- MAP GENERATION & COLLISION DATA ---
         const envGroup = new THREE.Group();
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9 });
-        function createWall(w, h, d, x, y, z) { const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat); wall.position.set(x, y, z); envGroup.add(wall); }
-        createWall(50, 10, 1, 0, 5, -25); createWall(50, 10, 1, 0, 5, 25); createWall(1, 10, 50, -25, 5, 0); createWall(1, 10, 50, 25, 5, 0);  
         scene.add(envGroup);
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9 });
+        let collisionBoxes = []; // Stores hitboxes for the walls
 
+        function createWall(w, h, d, x, y, z) { 
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat); 
+            wall.position.set(x, y, z); 
+            envGroup.add(wall); 
+            
+            // Generate exact bounding box for collision detection
+            const box = new THREE.Box3().setFromObject(wall);
+            collisionBoxes.push(box);
+        }
+
+        function loadMap(mapId) {
+            envGroup.clear(); // Remove old walls
+            collisionBoxes = []; // Clear old hitboxes
+
+            // Outer Arena Walls (Common to all maps)
+            createWall(50, 10, 1, 0, 5, -25); 
+            createWall(50, 10, 1, 0, 5, 25);  
+            createWall(1, 10, 50, -25, 5, 0); 
+            createWall(1, 10, 50, 25, 5, 0);  
+
+            mapId = parseInt(mapId);
+            if (mapId === 2) {
+                // Map 2: The Warehouse
+                createWall(8, 6, 8, 10, 3, -10);
+                createWall(8, 6, 8, -10, 3, 10);
+                createWall(15, 6, 2, 0, 3, 0);
+            } else if (mapId === 3) {
+                // Map 3: Labyrinth
+                createWall(20, 6, 2, -10, 3, -10);
+                createWall(2, 6, 20, 10, 3, -10);
+                createWall(20, 6, 2, 10, 3, 10);
+                createWall(2, 6, 20, -10, 3, 10);
+                createWall(6, 6, 6, 0, 3, 0); // Center pillar
+            }
+        }
+
+        // --- WEAPONS AND ASSETS ---
         const flashCanvas = document.createElement('canvas'); flashCanvas.width = 128; flashCanvas.height = 128; const fCtx = flashCanvas.getContext('2d');
         const gradient = fCtx.createRadialGradient(64, 64, 0, 64, 64, 64); gradient.addColorStop(0, 'rgba(255, 255, 255, 1)'); gradient.addColorStop(0.2, 'rgba(255, 200, 50, 0.8)'); gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
         fCtx.fillStyle = gradient; fCtx.fillRect(0, 0, 128, 128); const flashTex = new THREE.CanvasTexture(flashCanvas);
@@ -219,7 +262,6 @@
             return container;
         }
 
-        // --- WEAPONS ARRAY ---
         const WEAPONS = [
             { id: 1, name: "Assault Rifle", isMelee: false, maxAmmo: 30, currentAmmo: 30, fireRate: 0.09, damage: 25, pellets: 1, auto: true, reloadTime: 1500, adsFov: 50, hipPos: new THREE.Vector3(0.2, -0.2, -0.35), adsPos: new THREE.Vector3(0, -0.11, -0.25), model: buildARModel() },
             { id: 2, name: "Sniper Rifle", isMelee: false, maxAmmo: 5, currentAmmo: 5, fireRate: 1.5, damage: 100, pellets: 1, auto: false, reloadTime: 2500, adsFov: 15, hipPos: new THREE.Vector3(0.25, -0.2, -0.3), adsPos: new THREE.Vector3(0, -0.12, -0.15), model: buildSniperModel() },
@@ -270,11 +312,16 @@
             const fade = setInterval(() => { opacity -= 0.1; tracer.material.opacity = opacity; if (opacity <= 0) { clearInterval(fade); scene.remove(tracer); } }, 16);
         }
 
-        const bulletHoles = [];
+        let decals = [];
         const holeGeo = new THREE.CircleGeometry(0.03, 8);
         const cutGeo = new THREE.PlaneGeometry(0.015, 0.2); 
         const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
         
+        function clearDecals() {
+            decals.forEach(d => scene.remove(d));
+            decals = [];
+        }
+
         function createDecal(intersection, isCut) {
             const geo = isCut ? cutGeo : holeGeo;
             const decal = new THREE.Mesh(geo, holeMat); 
@@ -285,14 +332,14 @@
             decal.lookAt(decal.position.clone().add(worldNormal)); 
             if (isCut) decal.rotateZ(Math.random() * Math.PI); 
             decal.position.addScaledVector(worldNormal, 0.002);
-            scene.add(decal); bulletHoles.push(decal);
+            scene.add(decal); decals.push(decal);
 
             if (!isCut) {
                 const spark = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.1), new THREE.MeshBasicMaterial({ map: flashTex, transparent: true, opacity: 1, blending: THREE.AdditiveBlending }));
                 spark.position.copy(decal.position); spark.lookAt(camera.position); scene.add(spark);
                 setTimeout(() => { scene.remove(spark); spark.geometry.dispose(); spark.material.dispose(); }, 50);
             }
-            if (bulletHoles.length > 100) { scene.remove(bulletHoles.shift()); }
+            if (decals.length > 100) { scene.remove(decals.shift()); }
         }
 
         // --- NETWORKING & GAME LOGIC ---
@@ -301,6 +348,7 @@
         const ammoCounter = document.getElementById('ammo-counter');
         const deathScreen = document.getElementById('death-screen');
         const roomInput = document.getElementById('new-room-input');
+        const mapInput = document.getElementById('map-select');
         
         let inGame = false; let myHealth = 100; let isMoving = false;
         let isShooting = false, isAiming = false, isReloading = false;
@@ -343,10 +391,12 @@
             }
         }
 
-        function enterGame(roomName) {
+        function enterGame(roomName, mapId) {
             const finalRoomName = roomName.trim() || "Lobby";
             roomInput.blur(); 
-            socket.emit('joinRoom', finalRoomName);
+            mapInput.blur();
+            
+            socket.emit('joinRoom', { roomName: finalRoomName, mapId: mapId });
             document.getElementById('current-room-name').innerText = finalRoomName;
             inGame = true; updateMyHealth(100); 
             WEAPONS.forEach(w => w.currentAmmo = w.maxAmmo);
@@ -354,8 +404,9 @@
             controls.lock(); 
         }
 
-        document.getElementById('create-room-btn').addEventListener('click', () => { enterGame(roomInput.value); });
-        roomInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') enterGame(roomInput.value); });
+        document.getElementById('create-room-btn').addEventListener('click', () => { enterGame(roomInput.value, mapInput.value); });
+        roomInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') enterGame(roomInput.value, mapInput.value); });
+        
         document.getElementById('resume-btn').addEventListener('click', () => { controls.lock(); });
         document.getElementById('pause-menu').addEventListener('click', (e) => { if (e.target.id === 'pause-menu' || e.target.className === 'menu-box') controls.lock(); });
         document.getElementById('leave-btn').addEventListener('click', () => {
@@ -372,30 +423,27 @@
             list.innerHTML = '';
             rooms.forEach(room => {
                 const div = document.createElement('div'); div.className = 'server-item';
-                div.innerHTML = `<span><strong>${room.name}</strong> (${room.players})</span><button class="btn join-btn">Join</button>`;
-                div.querySelector('.join-btn').addEventListener('click', () => enterGame(room.name));
+                // Automatically join the specific map that room is playing on
+                div.innerHTML = `<span><strong>${room.name}</strong> (${room.players}) [Map ${room.mapId}]</span><button class="btn join-btn">Join</button>`;
+                div.querySelector('.join-btn').addEventListener('click', () => enterGame(room.name, room.mapId));
                 list.appendChild(div);
             });
         });
 
-        function buildPlayerModel(id, color) {
-            const group = new THREE.Group(); group.userData = { id: id }; 
-            const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.0, 1.2), new THREE.MeshStandardMaterial({ color: color }));
-            body.position.y = 1.0; group.add(body);
-            const visor = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.4), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-            visor.position.set(0, 1.6, -0.5); group.add(visor);
-            return group;
-        }
-
-        socket.on('currentPlayers', (serverPlayers) => {
+        // Event for loading into the room
+        socket.on('roomState', (data) => {
+            clearDecals();
+            loadMap(data.mapId); // Generate the correct map!
+            
             for (let id in players) { scene.remove(players[id]); delete players[id]; } 
-            for (let id in serverPlayers) {
-                if (id === socket.id) { updateMyHealth(serverPlayers[id].health); continue; }
-                const pModel = buildPlayerModel(serverPlayers[id].id, serverPlayers[id].color);
-                pModel.position.copy(serverPlayers[id].position); pModel.rotation.y = serverPlayers[id].rotation.y;
-                scene.add(pModel); players[serverPlayers[id].id] = pModel;
+            for (let id in data.players) {
+                if (id === socket.id) { updateMyHealth(data.players[id].health); continue; }
+                const pModel = buildPlayerModel(data.players[id].id, data.players[id].color);
+                pModel.position.copy(data.players[id].position); pModel.rotation.y = data.players[id].rotation.y;
+                scene.add(pModel); players[data.players[id].id] = pModel;
             }
         });
+
         socket.on('newPlayer', (p) => {
             const pModel = buildPlayerModel(p.id, p.color); pModel.position.copy(p.position); pModel.rotation.y = p.rotation.y;
             scene.add(pModel); players[p.id] = pModel;
@@ -552,6 +600,29 @@
             if (keys.hasOwnProperty(key)) keys[key] = false;
         });
 
+        // --- COLLISION ENGINE ---
+        // AABB (Axis-Aligned Bounding Box) physics checking
+        function checkCollision(pos) {
+            // Player Bounding Box (Radius 0.4, Height 2.0)
+            const pBox = new THREE.Box3(
+                new THREE.Vector3(pos.x - 0.4, pos.y - 1.5, pos.z - 0.4),
+                new THREE.Vector3(pos.x + 0.4, pos.y + 0.5, pos.z + 0.4)
+            );
+            
+            // Check environment walls
+            for (let i = 0; i < collisionBoxes.length; i++) {
+                if (pBox.intersectsBox(collisionBoxes[i])) return true;
+            }
+
+            // Check other players
+            for (let id in players) {
+                const otherBox = new THREE.Box3().setFromObject(players[id]);
+                if (pBox.intersectsBox(otherBox)) return true;
+            }
+            return false;
+        }
+
+        // --- RENDER LOOP ---
         const moveSpeed = 50.0;
         const velocity = new THREE.Vector3(); const direction = new THREE.Vector3();
         let prevTime = performance.now();
@@ -560,7 +631,7 @@
         function animate() {
             requestAnimationFrame(animate);
             const time = performance.now();
-            const delta = (time - prevTime) / 1000;
+            const delta = Math.min((time - prevTime) / 1000, 0.1);
             prevTime = time;
 
             if (isShooting && currentWeapon.auto && !isReloading && controls.isLocked) {
@@ -576,8 +647,8 @@
 
             document.getElementById('ch-top').style.transform = `translateY(-${currentCrosshairSpread}px)`;
             document.getElementById('ch-bottom').style.transform = `translateY(${currentCrosshairSpread}px)`;
-            document.getElementById('ch-left').style.transform = `translateX(-${currentCrosshairSpread}px)`;
-            document.getElementById('ch-right').style.transform = `translateX(${currentCrosshairSpread}px)`;
+            document.getElementById('ch-left').style.transform = `translateY(-${currentCrosshairSpread}px) rotate(90deg)`;
+            document.getElementById('ch-right').style.transform = `translateY(${currentCrosshairSpread}px) rotate(90deg)`;
             
             document.getElementById('crosshair').style.opacity = (isAiming && !currentWeapon.isMelee) ? '0' : '0.8';
 
@@ -607,7 +678,23 @@
                 isMoving = direction.x !== 0 || direction.z !== 0;
             }
 
-            controls.moveRight(-velocity.x * delta); controls.moveForward(-velocity.z * delta); camera.position.y += (velocity.y * delta);
+            // --- SLIDING COLLISION LOGIC ---
+            const oldPos = camera.position.clone();
+            
+            // Move X
+            controls.moveRight(-velocity.x * delta);
+            if (checkCollision(camera.position)) {
+                camera.position.x = oldPos.x; // Cancel X movement if blocked
+            }
+            
+            // Move Z
+            controls.moveForward(-velocity.z * delta);
+            if (checkCollision(camera.position)) {
+                camera.position.z = oldPos.z; // Cancel Z movement if blocked
+            }
+
+            // Handle Y (Gravity & Jumping) independently
+            camera.position.y += (velocity.y * delta);
             if (camera.position.y < 1.7) { velocity.y = 0; camera.position.y = 1.7; canJump = true; }
 
             let bobX = 0, bobY = 0;
@@ -620,10 +707,9 @@
                 if (progress >= 1) { progress = 1; isReloading = false; currentWeapon.currentAmmo = currentWeapon.maxAmmo; updateAmmoUI(); }
                 gunGroup.position.copy(currentWeapon.hipPos);
                 
-                // FIXED TILTED FLIP ANIMATION
                 gunGroup.rotation.order = 'ZYX'; 
                 const totalFlips = Math.ceil(currentWeapon.reloadTime / 400); 
-                const sideTilt = Math.sin(progress * Math.PI) * (-55 * (Math.PI / 180)); // -55 Degrees
+                const sideTilt = Math.sin(progress * Math.PI) * (-55 * (Math.PI / 180)); 
                 const inwardTilt = Math.sin(progress * Math.PI) * -0.4; 
                 
                 gunGroup.rotation.set(-progress * Math.PI * 2 * totalFlips, inwardTilt, sideTilt); 
