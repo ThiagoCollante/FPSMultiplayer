@@ -96,7 +96,14 @@ io.on('connection', (socket) => {
     socket.on('registerHit', (data) => {
         if (currentRoom && rooms[currentRoom].players[data.targetId]) {
             const target = rooms[currentRoom].players[data.targetId];
-            target.health -= (data.damage || 25); 
+            
+            // Double the damage if it's a headshot
+            let finalDamage = data.damage || 25;
+            if (data.isHeadshot) {
+                finalDamage *= 2; 
+            }
+
+            target.health -= finalDamage; 
 
             if (target.health <= 0) {
                 target.health = 100; 
