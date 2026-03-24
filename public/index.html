@@ -151,32 +151,91 @@
         createWall(1, 10, 50, 25, 5, 0);  
         scene.add(envGroup);
 
+        // --- NEW REALISTIC TACTICAL GUN MODEL ---
         const gunGroup = new THREE.Group();
-        const gunMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.7 });
-        const darkMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
-        const metalMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.8, roughness: 0.2 });
-
-        const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.4), gunMat);
-        gunGroup.add(receiver);
-
-        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.35, 12), metalMat);
-        barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.02, -0.35); gunGroup.add(barrel);
-
-        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.08), darkMat);
-        grip.rotation.x = -Math.PI / 10; grip.position.set(0, -0.12, 0.12); gunGroup.add(grip);
-
-        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.1), darkMat);
-        mag.rotation.x = Math.PI / 16; mag.position.set(0, -0.12, -0.05); gunGroup.add(mag);
-
-        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.25), gunMat);
-        stock.position.set(0, -0.02, 0.3); gunGroup.add(stock);
-
-        const sightFront = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.04, 0.01), darkMat);
-        sightFront.position.set(0, 0.08, -0.45); gunGroup.add(sightFront);
         
-        const sightBack = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.02), darkMat);
-        sightBack.position.set(0, 0.07, 0.1); gunGroup.add(sightBack);
+        // Materials
+        const polymerMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8, metalness: 0.2 });
+        const metalMat = new THREE.MeshStandardMaterial({ color: 0x2c2f33, roughness: 0.5, metalness: 0.7 });
+        const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.6, metalness: 0.8 });
+        const glassMat = new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+        const dotMat = new THREE.MeshBasicMaterial({ color: 0xff0000 }); 
 
+        // 1. Receivers
+        const upperReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.08, 0.3), metalMat);
+        upperReceiver.position.set(0, 0.04, 0); gunGroup.add(upperReceiver);
+
+        const lowerReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.06, 0.2), polymerMat);
+        lowerReceiver.position.set(0, -0.02, 0.02); gunGroup.add(lowerReceiver);
+
+        const ejectionPort = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.08), darkMetalMat);
+        ejectionPort.position.set(0.005, 0.04, 0.02); gunGroup.add(ejectionPort);
+
+        // 2. Barrel & Muzzle
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.012, 0.45, 16), darkMetalMat);
+        barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.04, -0.25); gunGroup.add(barrel);
+
+        const muzzleBrake = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.06, 12), metalMat);
+        muzzleBrake.rotation.x = Math.PI / 2; muzzleBrake.position.set(0, 0.04, -0.48); gunGroup.add(muzzleBrake);
+
+        // 3. Handguard (MLOK style)
+        const handguard = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.3, 8), polymerMat);
+        handguard.rotation.x = Math.PI / 2; handguard.position.set(0, 0.04, -0.2); gunGroup.add(handguard);
+        
+        const topRail = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.01, 0.3), darkMetalMat);
+        topRail.position.set(0, 0.075, -0.2); gunGroup.add(topRail);
+
+        // 4. Stock & Buffer Tube
+        const bufferTube = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.2, 12), metalMat);
+        bufferTube.rotation.x = Math.PI / 2; bufferTube.position.set(0, 0.04, 0.25); gunGroup.add(bufferTube);
+
+        const stockBase = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.15), polymerMat);
+        stockBase.position.set(0, 0, 0.3); gunGroup.add(stockBase);
+        
+        const stockPad = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.14, 0.02), darkMetalMat);
+        stockPad.position.set(0, 0, 0.38); gunGroup.add(stockPad);
+
+        // 5. Grip & Trigger
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.12, 0.055), polymerMat);
+        grip.rotation.x = -Math.PI / 12; grip.position.set(0, -0.09, 0.1); gunGroup.add(grip);
+
+        const triggerGuard = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.04, 0.06), darkMetalMat);
+        triggerGuard.position.set(0, -0.06, 0.05); gunGroup.add(triggerGuard);
+
+        const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.03, 0.01), metalMat);
+        trigger.position.set(0, -0.05, 0.06); gunGroup.add(trigger);
+
+        // 6. Magazine (Curved look)
+        const magTop = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.07), polymerMat);
+        magTop.position.set(0, -0.08, -0.03); magTop.rotation.x = Math.PI / 24; gunGroup.add(magTop);
+
+        const magBottom = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.07), polymerMat);
+        magBottom.position.set(0, -0.16, -0.045); magBottom.rotation.x = Math.PI / 8; gunGroup.add(magBottom);
+
+        // 7. Tactical Foregrip
+        const foregrip = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.08, 0.035), polymerMat);
+        foregrip.position.set(0, -0.04, -0.25); foregrip.rotation.x = -Math.PI / 16; gunGroup.add(foregrip);
+
+        // 8. Holographic Red Dot Sight
+        const sightBase = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.06), metalMat);
+        sightBase.position.set(0, 0.09, 0); gunGroup.add(sightBase);
+
+        const sightFrameL = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.04, 0.04), metalMat);
+        sightFrameL.position.set(-0.015, 0.11, 0); gunGroup.add(sightFrameL);
+        
+        const sightFrameR = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.04, 0.04), metalMat);
+        sightFrameR.position.set(0.015, 0.11, 0); gunGroup.add(sightFrameR);
+
+        const sightFrameTop = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.005, 0.04), metalMat);
+        sightFrameTop.position.set(0, 0.13, 0); gunGroup.add(sightFrameTop);
+
+        const sightGlass = new THREE.Mesh(new THREE.PlaneGeometry(0.025, 0.03), glassMat);
+        sightGlass.position.set(0, 0.11, 0.01); gunGroup.add(sightGlass);
+
+        const redDot = new THREE.Mesh(new THREE.CircleGeometry(0.0015, 8), dotMat);
+        redDot.position.set(0, 0.11, 0.011); gunGroup.add(redDot);
+
+        // Flash Canvas
         const flashCanvas = document.createElement('canvas');
         flashCanvas.width = 128; flashCanvas.height = 128;
         const fCtx = flashCanvas.getContext('2d');
@@ -188,19 +247,21 @@
         const flashTex = new THREE.CanvasTexture(flashCanvas);
 
         const flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, transparent: true, opacity: 0 }));
-        flashSprite.scale.set(0.4, 0.4, 0.4); flashSprite.position.set(0, 0.02, -0.55); 
+        flashSprite.scale.set(0.4, 0.4, 0.4); 
+        flashSprite.position.set(0, 0.04, -0.55); // Adjusted for longer barrel
         gunGroup.add(flashSprite);
 
         const flashLight = new THREE.PointLight(0xffaa00, 0, 5);
         flashLight.position.copy(flashSprite.position); gunGroup.add(flashLight);
 
-        const hipPosition = new THREE.Vector3(0.25, -0.25, -0.4);
-        const adsPosition = new THREE.Vector3(0, -0.12, -0.3); 
-        
-        // This variable tracks the base visual position of the gun before bob and recoil
+        // ADS Coordinates calibrated for the new Red Dot Sight
+        const hipPosition = new THREE.Vector3(0.2, -0.2, -0.35);
+        const adsPosition = new THREE.Vector3(0, -0.11, -0.25); 
         const currentGunBasePos = new THREE.Vector3().copy(hipPosition);
 
         camera.add(gunGroup);
+
+        // --- END GUN MODEL ---
 
         const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
         const tracerGeo = new THREE.CylinderGeometry(0.005, 0.005, 1, 4); tracerGeo.rotateX(Math.PI / 2);
@@ -245,13 +306,26 @@
 
         const controls = new PointerLockControls(camera, document.body);
 
+        controls.addEventListener('lock', () => {
+            if (inGame) {
+                document.getElementById('pause-menu').style.display = 'none';
+                document.getElementById('main-menu').style.display = 'none';
+                document.getElementById('ui-layer').style.display = 'flex';
+            }
+        });
+
         controls.addEventListener('unlock', () => {
             document.getElementById('ui-layer').style.display = 'none';
             isShooting = false; isAiming = false;
+            
+            for (let k in keys) keys[k] = false;
+
             if (inGame) {
                 document.getElementById('pause-menu').style.display = 'flex';
                 document.getElementById('pause-players-display').innerText = Object.keys(players).length + 1; 
-            } else { document.getElementById('main-menu').style.display = 'flex'; }
+            } else { 
+                document.getElementById('main-menu').style.display = 'flex'; 
+            }
         });
 
         function updateMyHealth(hp) {
@@ -266,18 +340,15 @@
             socket.emit('joinRoom', roomName);
             document.getElementById('current-room-name').innerText = roomName;
             inGame = true; updateMyHealth(100); ammo = maxAmmo; updateAmmoUI();
-            
-            document.getElementById('main-menu').style.display = 'none';
-            document.getElementById('pause-menu').style.display = 'none';
-            document.getElementById('ui-layer').style.display = 'flex';
             controls.lock(); 
         }
 
         document.getElementById('create-room-btn').addEventListener('click', () => enterGame(document.getElementById('new-room-input').value));
-        document.getElementById('resume-btn').addEventListener('click', () => {
-            document.getElementById('pause-menu').style.display = 'none';
-            document.getElementById('ui-layer').style.display = 'flex';
-            controls.lock();
+        
+        document.getElementById('resume-btn').addEventListener('click', () => { controls.lock(); });
+        
+        document.getElementById('pause-menu').addEventListener('click', (e) => {
+            if (e.target.id === 'pause-menu' || e.target.className === 'menu-box') controls.lock();
         });
         
         document.getElementById('leave-btn').addEventListener('click', () => {
@@ -361,7 +432,6 @@
             isReloading = true;
             isAiming = false; 
             
-            // Drop gun manually for reload animation
             gunGroup.rotation.x = -0.5; 
             setTimeout(() => { ammo = maxAmmo; isReloading = false; updateAmmoUI(); }, 1500);
         }
@@ -430,7 +500,6 @@
             }
             socket.emit('playerShot', { hitPoint: hitPoint });
 
-            // Auto-Reload if empty
             if (ammo === 0) reload(); 
         }
 
@@ -490,12 +559,10 @@
                 if (recoilRecoveryTimer > 0.15) shotCount = Math.max(0, shotCount - delta * 25); 
             }
 
-            // --- FIXED ANIMATION & RELOAD MATH ---
             crosshair.style.opacity = isAiming ? '0' : '0.8';
             
-            // If reloading, force the target position back to hip
             const targetGunPos = (isAiming && !isReloading) ? adsPosition : hipPosition;
-            currentGunBasePos.lerp(targetGunPos, 0.15); // Smoothly transitions the base position
+            currentGunBasePos.lerp(targetGunPos, 0.15); 
             
             gunRecoilOffset.lerp(new THREE.Vector3(0,0,0), 0.15); 
             gunRecoilRot.x *= 0.8; 
@@ -534,11 +601,9 @@
                 bobY = Math.sin(time * 0.012) * 0.01;
             }
 
-            // Always update position so it lowers smoothly during reload
             gunGroup.position.copy(currentGunBasePos);
             gunGroup.position.add(new THREE.Vector3(bobX + gunRecoilOffset.x, bobY + gunRecoilOffset.y, gunRecoilOffset.z));
 
-            // Let the reload function control rotation when active
             if (!isReloading) {
                 gunGroup.rotation.set(gunRecoilRot.x, gunRecoilRot.y, gunRecoilRot.z);
             }
