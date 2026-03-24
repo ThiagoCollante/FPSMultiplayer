@@ -118,7 +118,6 @@
         gridHelper.position.y = 0.01;
         scene.add(gridHelper);
 
-        // --- Environment Walls (For testing bullet holes) ---
         const envGroup = new THREE.Group();
         const wallMat = new THREE.MeshStandardMaterial({ color: 0x3a4a5a, roughness: 0.7 });
         
@@ -133,7 +132,7 @@
         
         scene.add(envGroup);
 
-        // --- Assault Rifle Model & Muzzle Flash ---
+        // --- Gun Model & Muzzle Flash ---
         let muzzleLight, muzzleMesh;
         function createGunModel() {
             const gunGroup = new THREE.Group();
@@ -170,7 +169,6 @@
             sightBack.position.set(0, 0.07, 0.1);
             gunGroup.add(sightBack);
 
-            // Muzzle Flash Setup
             muzzleLight = new THREE.PointLight(0xffcc00, 0, 5);
             muzzleMesh = new THREE.Mesh(
                 new THREE.SphereGeometry(0.05, 4, 4),
@@ -180,7 +178,7 @@
             muzzleMesh.visible = false;
             
             const flashGroup = new THREE.Group();
-            flashGroup.position.set(0, 0.02, -0.55); // Tip of barrel
+            flashGroup.position.set(0, 0.02, -0.55); 
             flashGroup.add(muzzleLight);
             flashGroup.add(muzzleMesh);
             gunGroup.add(flashGroup);
@@ -196,18 +194,15 @@
         const maxHoles = 50;
 
         function createBulletHole(point, normal) {
-            // PolygonOffset pushes the mesh slightly forward to prevent Z-fighting
             const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
             const holeMesh = new THREE.Mesh(new THREE.CircleGeometry(0.06, 8), holeMat);
             
             holeMesh.position.copy(point);
-            // Orient hole to match the surface normal
             holeMesh.lookAt(point.clone().add(normal));
             
             scene.add(holeMesh);
             bulletHoles.push(holeMesh);
             
-            // Clean up old bullet holes
             if (bulletHoles.length > maxHoles) {
                 scene.remove(bulletHoles[0]);
                 bulletHoles.shift();
@@ -368,14 +363,13 @@
             players[p.id] = playerModel;
         }
 
-
-        // --- Competitive Firing, Recoil & Spray Pattern ---
+        // --- FIXED: Competitive Firing, Recoil & Spray Pattern ---
         const raycaster = new THREE.Raycaster();
         let isFiring = false;
         let isAiming = false;
         
         let lastFireTime = 0;
-        const fireRate = 100; // 10 rounds/sec
+        const fireRate = 100; 
         
         let bulletCount = 0;
         let recoilRecoveryTimer = 0;
@@ -387,27 +381,27 @@
         let recoilRotX = 0;
 
         function getSprayOffset() {
-            // Screen offsets map from -1 to 1.
-            const maxUp = 0.08; 
-            const maxRight = 0.12;
-            
+            // FIXED: Tighter, much more controlled values.
+            const maxUp = 0.025; 
+            const maxRight = 0.035;
+
             let offsetX = 0;
             let offsetY = 0;
 
             if (bulletCount <= 5) {
-                // Initial vertical kick
+                // First 5 bullets: Straight vertical climb
                 offsetY = (bulletCount / 5) * maxUp;
+                offsetX = (Math.random() - 0.5) * 0.002;
             } else if (bulletCount <= 12) {
-                // Pulls right, stays high
-                offsetY = maxUp + (Math.random() * 0.01 - 0.005);
+                // Bullets 6-12: Hard pull right, maintaining height
+                offsetY = maxUp + (Math.random() * 0.005 - 0.0025);
                 offsetX = ((bulletCount - 5) / 7) * maxRight;
             } else {
-                // Caps out at the end of the "7" with random spread
-                offsetY = maxUp + (Math.random() * 0.03 - 0.015);
-                offsetX = maxRight + (Math.random() * 0.03 - 0.015);
+                // Bullets 13+: Plateau at the top right with controlled random spread
+                offsetY = maxUp + (Math.random() * 0.01 - 0.005);
+                offsetX = maxRight + (Math.random() * 0.015 - 0.0075);
             }
-            
-            // Aiming Down Sights cuts spread by 50%
+
             const multiplier = isAiming ? 0.5 : 1.0;
             return new THREE.Vector2(offsetX * multiplier, offsetY * multiplier);
         }
@@ -427,16 +421,18 @@
             bulletCount++;
             recoilRecoveryTimer = performance.now() + 250; 
 
-            // 1. Physical Camera Recoil (Kicks screen up)
-            const viewKick = isAiming ? 0.003 : 0.008;
+            // FIXED: Physical Camera Recoil - Always pitches the camera directly up
+            const viewKick = isAiming ? 0.002 : 0.005; 
             camera.rotation.x += viewKick;
+            // Clamping prevents the camera from doing a full 360 backflip
+            camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
 
-            // 2. Gun Visual Recoil
+            // Gun Visual Recoil
             recoilOffset.z += 0.05;
             recoilOffset.y += 0.01;
             recoilRotX += 0.08;
 
-            // 3. Muzzle Flash
+            // Muzzle Flash
             muzzleLight.intensity = 5;
             muzzleMesh.visible = true;
             setTimeout(() => {
@@ -444,11 +440,9 @@
                 muzzleMesh.visible = false;
             }, 50);
 
-            // 4. Calculate Spray Raycast
             const spray = getSprayOffset();
             raycaster.setFromCamera(spray, camera);
 
-            // Collect all hit targets (Players + Walls + Floor)
             const hitTargets = [];
             for (let id in players) { hitTargets.push(players[id]); }
             hitTargets.push(floor);
@@ -462,10 +456,8 @@
                 let rootObject = intersects[0].object;
 
                 if (rootObject === floor || envGroup.children.includes(rootObject)) {
-                    // Create Bullet Hole on environment
                     createBulletHole(hitPoint, intersects[0].face.normal);
                 } else {
-                    // It hit a player group
                     while (rootObject.parent && rootObject.userData.id === undefined) {
                         rootObject = rootObject.parent;
                     }
@@ -528,17 +520,14 @@
             const time = performance.now();
             const delta = (time - prevTime) / 1000;
 
-            // 1. Firing & Recoil Recovery
             if (isFiring && (time - lastFireTime > fireRate)) {
                 fireGun();
                 lastFireTime = time;
             }
             if (!isFiring && time > recoilRecoveryTimer && bulletCount > 0) {
-                // Smoothly reset the spray pattern tracker when resting
                 bulletCount = Math.max(0, bulletCount - 1);
             }
 
-            // 2. Gun LERP Animations
             const targetPos = isAiming ? adsPosition : hipPosition;
             recoilOffset.lerp(new THREE.Vector3(0, 0, 0), 0.15);
             recoilRotX += (0 - recoilRotX) * 0.15;
@@ -547,7 +536,6 @@
             myGun.rotation.x = recoilRotX;
             crosshair.style.opacity = isAiming ? '0' : '0.8';
 
-            // 3. Physics
             velocity.x -= velocity.x * 10.0 * delta;
             velocity.z -= velocity.z * 10.0 * delta;
             velocity.y -= gravity * delta; 
@@ -572,7 +560,6 @@
                 canJump = true;
             }
 
-            // 4. Networking
             if (inGame) {
                 const camDir = new THREE.Vector3();
                 camera.getWorldDirection(camDir);
