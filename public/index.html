@@ -418,10 +418,9 @@
             }
         });
 
-        // --- SHOOTING MATH ---
+        // --- SHOOTING & COMBAT MATH ---
         const raycaster = new THREE.Raycaster();
         let lastFireTime = 0, shotCount = 0, reloadStartTime = 0;
-
         const gunRecoilOffset = new THREE.Vector3(); const gunRecoilRot = new THREE.Euler();
 
         function reload() {
@@ -621,10 +620,12 @@
                 if (progress >= 1) { progress = 1; isReloading = false; currentWeapon.currentAmmo = currentWeapon.maxAmmo; updateAmmoUI(); }
                 gunGroup.position.copy(currentWeapon.hipPos);
                 
+                // FIXED TILTED FLIP ANIMATION
                 gunGroup.rotation.order = 'ZYX'; 
                 const totalFlips = Math.ceil(currentWeapon.reloadTime / 400); 
-                const sideTilt = Math.sin(progress * Math.PI) * 0.8; 
-                const inwardTilt = Math.sin(progress * Math.PI) * 0.4; 
+                const sideTilt = Math.sin(progress * Math.PI) * (-55 * (Math.PI / 180)); // -55 Degrees
+                const inwardTilt = Math.sin(progress * Math.PI) * -0.4; 
+                
                 gunGroup.rotation.set(-progress * Math.PI * 2 * totalFlips, inwardTilt, sideTilt); 
             } else if (isSwinging) {
                 gunGroup.rotation.order = 'XYZ'; 
