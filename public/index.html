@@ -158,29 +158,37 @@
         let flashSprite, flashLight; 
         
         function attachFlash(group, zPos) {
-            const fSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, transparent: true, opacity: 0 }));
-            fSprite.scale.set(0.4, 0.4, 0.4); fSprite.position.set(0, 0.04, zPos); 
-            const fLight = new THREE.PointLight(0xffaa00, 0, 5); fLight.position.copy(fSprite.position); 
-            group.add(fSprite); group.add(fLight);
+            flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, transparent: true, opacity: 0 }));
+            flashSprite.scale.set(0.4, 0.4, 0.4); flashSprite.position.set(0, 0.04, zPos); 
+            flashLight = new THREE.PointLight(0xffaa00, 0, 5); flashLight.position.copy(flashSprite.position); 
+            group.add(flashSprite); group.add(flashLight);
+        }
+
+        // Helper function to cleanly build parts without strict-mode read-only errors
+        function addPart(group, geometry, material, x, y, z, rx=0, ry=0, rz=0) {
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, y, z);
+            mesh.rotation.set(rx, ry, rz);
+            group.add(mesh);
         }
 
         function buildARModel() {
             const grp = new THREE.Group();
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.08, 0.3), metalMat), {position: new THREE.Vector3(0, 0.04, 0)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.06, 0.2), polymerMat), {position: new THREE.Vector3(0, -0.02, 0.02)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.012, 0.45, 16), darkMetalMat), {rotation: new THREE.Euler(Math.PI/2,0,0), position: new THREE.Vector3(0, 0.04, -0.25)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.3, 8), polymerMat), {rotation: new THREE.Euler(Math.PI/2,0,0), position: new THREE.Vector3(0, 0.04, -0.2)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.2, 12), metalMat), {rotation: new THREE.Euler(Math.PI/2,0,0), position: new THREE.Vector3(0, 0.04, 0.25)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.15), polymerMat), {position: new THREE.Vector3(0, 0, 0.3)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.12, 0.055), polymerMat), {rotation: new THREE.Euler(-Math.PI/12,0,0), position: new THREE.Vector3(0, -0.09, 0.1)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.07), polymerMat), {rotation: new THREE.Euler(Math.PI/24,0,0), position: new THREE.Vector3(0, -0.08, -0.03)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.07), polymerMat), {rotation: new THREE.Euler(Math.PI/8,0,0), position: new THREE.Vector3(0, -0.16, -0.045)}));
+            addPart(grp, new THREE.BoxGeometry(0.055, 0.08, 0.3), metalMat, 0, 0.04, 0);
+            addPart(grp, new THREE.BoxGeometry(0.045, 0.06, 0.2), polymerMat, 0, -0.02, 0.02);
+            addPart(grp, new THREE.CylinderGeometry(0.01, 0.012, 0.45, 16), darkMetalMat, 0, 0.04, -0.25, Math.PI/2, 0, 0);
+            addPart(grp, new THREE.CylinderGeometry(0.035, 0.035, 0.3, 8), polymerMat, 0, 0.04, -0.2, Math.PI/2, 0, 0);
+            addPart(grp, new THREE.CylinderGeometry(0.015, 0.015, 0.2, 12), metalMat, 0, 0.04, 0.25, Math.PI/2, 0, 0);
+            addPart(grp, new THREE.BoxGeometry(0.04, 0.12, 0.15), polymerMat, 0, 0, 0.3);
+            addPart(grp, new THREE.BoxGeometry(0.035, 0.12, 0.055), polymerMat, 0, -0.09, 0.1, -Math.PI/12, 0, 0);
+            addPart(grp, new THREE.BoxGeometry(0.03, 0.1, 0.07), polymerMat, 0, -0.08, -0.03, Math.PI/24, 0, 0);
+            addPart(grp, new THREE.BoxGeometry(0.03, 0.1, 0.07), polymerMat, 0, -0.16, -0.045, Math.PI/8, 0, 0);
             
-            // Red Dot
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.06), metalMat), {position: new THREE.Vector3(0, 0.09, 0)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.005, 0.04), metalMat), {position: new THREE.Vector3(0, 0.13, 0)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.PlaneGeometry(0.025, 0.03), glassMat), {position: new THREE.Vector3(0, 0.11, 0.01)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.CircleGeometry(0.0015, 8), dotMat), {position: new THREE.Vector3(0, 0.11, 0.011)}));
+            // Red Dot Sight
+            addPart(grp, new THREE.BoxGeometry(0.03, 0.02, 0.06), metalMat, 0, 0.09, 0);
+            addPart(grp, new THREE.BoxGeometry(0.035, 0.005, 0.04), metalMat, 0, 0.13, 0);
+            addPart(grp, new THREE.PlaneGeometry(0.025, 0.03), glassMat, 0, 0.11, 0.01);
+            addPart(grp, new THREE.CircleGeometry(0.0015, 8), dotMat, 0, 0.11, 0.011);
             
             attachFlash(grp, -0.55);
             return grp;
@@ -188,15 +196,20 @@
 
         function buildSniperModel() {
             const grp = new THREE.Group();
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.4), darkMetalMat), {position: new THREE.Vector3(0, 0.04, 0)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.015, 0.8, 16), metalMat), {rotation: new THREE.Euler(Math.PI/2,0,0), position: new THREE.Vector3(0, 0.04, -0.4)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.08), darkMetalMat), {position: new THREE.Vector3(0, 0.04, -0.8)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.25, 16), darkMetalMat), {rotation: new THREE.Euler(Math.PI/2,0,0), position: new THREE.Vector3(0, 0.12, 0)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.04), glassMat), {position: new THREE.Vector3(0, 0.12, -0.126)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.CircleGeometry(0.002, 8), dotMat), {position: new THREE.Vector3(0, 0.12, -0.125)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.15, 0.25), polymerMat), {position: new THREE.Vector3(0, 0.0, 0.3)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.12, 0.055), polymerMat), {rotation: new THREE.Euler(-Math.PI/12,0,0), position: new THREE.Vector3(0, -0.07, 0.1)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.08, 0.08), darkMetalMat), {position: new THREE.Vector3(0, -0.04, -0.05)}));
+            addPart(grp, new THREE.BoxGeometry(0.05, 0.08, 0.4), darkMetalMat, 0, 0.04, 0);
+            // Long Barrel
+            addPart(grp, new THREE.CylinderGeometry(0.012, 0.015, 0.8, 16), metalMat, 0, 0.04, -0.4, Math.PI/2, 0, 0);
+            // Muzzle brake
+            addPart(grp, new THREE.BoxGeometry(0.03, 0.03, 0.08), darkMetalMat, 0, 0.04, -0.8);
+            // Big Scope
+            addPart(grp, new THREE.CylinderGeometry(0.025, 0.025, 0.25, 16), darkMetalMat, 0, 0.12, 0, Math.PI/2, 0, 0);
+            addPart(grp, new THREE.PlaneGeometry(0.04, 0.04), glassMat, 0, 0.12, -0.126);
+            addPart(grp, new THREE.CircleGeometry(0.002, 8), dotMat, 0, 0.12, -0.125);
+            // Stock
+            addPart(grp, new THREE.BoxGeometry(0.04, 0.15, 0.25), polymerMat, 0, 0.0, 0.3);
+            // Grip & Mag
+            addPart(grp, new THREE.BoxGeometry(0.035, 0.12, 0.055), polymerMat, 0, -0.07, 0.1, -Math.PI/12, 0, 0);
+            addPart(grp, new THREE.BoxGeometry(0.03, 0.08, 0.08), darkMetalMat, 0, -0.04, -0.05);
             
             attachFlash(grp, -0.85);
             return grp;
@@ -204,12 +217,17 @@
 
         function buildShotgunModel() {
             const grp = new THREE.Group();
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.3), darkMetalMat), {position: new THREE.Vector3(0, 0.04, 0)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.5, 16), darkMetalMat), {rotation: new THREE.Euler(Math.PI/2,0,0), position: new THREE.Vector3(0, 0.05, -0.3)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.45, 16), metalMat), {rotation: new THREE.Euler(Math.PI/2,0,0), position: new THREE.Vector3(0, 0.01, -0.27)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.15, 12), polymerMat), {rotation: new THREE.Euler(Math.PI/2,0,0), position: new THREE.Vector3(0, 0.01, -0.2)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.12, 0.25), woodMat), {rotation: new THREE.Euler(Math.PI/24,0,0), position: new THREE.Vector3(0, 0, 0.25)}));
-            grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.02, 0.01), metalMat), {position: new THREE.Vector3(0, 0.07, -0.5)}));
+            addPart(grp, new THREE.BoxGeometry(0.06, 0.1, 0.3), darkMetalMat, 0, 0.04, 0);
+            // Thick Barrel
+            addPart(grp, new THREE.CylinderGeometry(0.015, 0.015, 0.5, 16), darkMetalMat, 0, 0.05, -0.3, Math.PI/2, 0, 0);
+            // Tube under barrel
+            addPart(grp, new THREE.CylinderGeometry(0.012, 0.012, 0.45, 16), metalMat, 0, 0.01, -0.27, Math.PI/2, 0, 0);
+            // Pump Handle
+            addPart(grp, new THREE.CylinderGeometry(0.025, 0.025, 0.15, 12), polymerMat, 0, 0.01, -0.2, Math.PI/2, 0, 0);
+            // Wood Stock
+            addPart(grp, new THREE.BoxGeometry(0.045, 0.12, 0.25), woodMat, 0, 0, 0.25, Math.PI/24, 0, 0);
+            // Simple iron sight
+            addPart(grp, new THREE.BoxGeometry(0.01, 0.02, 0.01), metalMat, 0, 0.07, -0.5);
             
             attachFlash(grp, -0.6);
             return grp;
@@ -226,11 +244,6 @@
         let gunGroup = currentWeapon.model;
         let ammo = currentWeapon.maxAmmo;
         const currentGunBasePos = new THREE.Vector3().copy(currentWeapon.hipPos);
-        
-        // FIX: Ensure the flash variables are correctly bound to the first weapon loaded
-        flashSprite = gunGroup.children[gunGroup.children.length - 2];
-        flashLight = gunGroup.children[gunGroup.children.length - 1];
-
         camera.add(gunGroup);
 
         function equipWeapon(index) {
@@ -239,7 +252,6 @@
             currentWeapon = WEAPONS[index];
             gunGroup = currentWeapon.model;
             
-            // Re-bind global flash references to the new gun's flash
             flashSprite = gunGroup.children[gunGroup.children.length - 2];
             flashLight = gunGroup.children[gunGroup.children.length - 1];
 
@@ -322,33 +334,18 @@
             document.getElementById('health-bar').style.background = hp <= 30 ? '#ff4655' : '#00ffcc';
         }
 
-        // FIX: The enterGame function handles empty inputs and correctly drops focus
         function enterGame(roomName) {
             const finalRoomName = roomName.trim() || "Lobby";
-            
-            // Remove focus from the text input so the browser safely allows the mouse to lock
             roomInput.blur(); 
 
             socket.emit('joinRoom', finalRoomName);
             document.getElementById('current-room-name').innerText = finalRoomName;
-            inGame = true; 
-            updateMyHealth(100); 
-            ammo = currentWeapon.maxAmmo; 
-            updateAmmoUI();
-
+            inGame = true; updateMyHealth(100); ammo = currentWeapon.maxAmmo; updateAmmoUI();
             controls.lock(); 
         }
 
-        // FIX: Handles click event perfectly
-        document.getElementById('create-room-btn').addEventListener('click', () => {
-            enterGame(roomInput.value);
-        });
-
-        // FIX: Allows you to hit "Enter" on your keyboard to start
-        roomInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') enterGame(roomInput.value);
-        });
-
+        document.getElementById('create-room-btn').addEventListener('click', () => { enterGame(roomInput.value); });
+        roomInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') enterGame(roomInput.value); });
         document.getElementById('resume-btn').addEventListener('click', () => { controls.lock(); });
         document.getElementById('pause-menu').addEventListener('click', (e) => { if (e.target.id === 'pause-menu' || e.target.className === 'menu-box') controls.lock(); });
         
@@ -436,9 +433,7 @@
         }
 
         function getSprayNDC(index) {
-            if (currentWeapon.name === "Shotgun") {
-                return new THREE.Vector2((Math.random() - 0.5) * 0.15, (Math.random() - 0.5) * 0.15);
-            }
+            if (currentWeapon.name === "Shotgun") return new THREE.Vector2((Math.random() - 0.5) * 0.15, (Math.random() - 0.5) * 0.15);
             if (currentWeapon.name === "Sniper Rifle") {
                 if (!isAiming) return new THREE.Vector2((Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.3);
                 return new THREE.Vector2(0, 0); 
@@ -455,8 +450,8 @@
             ammo--; updateAmmoUI(); shotCount++;
 
             flashSprite.material.opacity = 1; flashLight.intensity = 2;
-            
             gunRecoilOffset.z = 0.12; gunRecoilRot.x = 0.15; 
+            
             const viewKick = isAiming ? 0.003 : 0.01;
             const euler = new THREE.Euler(0, 0, 0, 'YXZ');
             euler.setFromQuaternion(camera.quaternion);
@@ -514,9 +509,7 @@
         document.addEventListener('mousedown', (e) => {
             if (!controls.isLocked || !inGame) return;
             if (e.button === 0) {
-                if (currentWeapon.auto) {
-                    isShooting = true;
-                } else {
+                if (currentWeapon.auto) { isShooting = true; } else {
                     if (performance.now() / 1000 - lastFireTime > currentWeapon.fireRate) {
                         fireBullet(); lastFireTime = performance.now() / 1000; shotCount = 0;
                     }
@@ -570,8 +563,6 @@
                 if (time / 1000 - lastFireTime > currentWeapon.fireRate) {
                     fireBullet(); lastFireTime = time / 1000; 
                 }
-            } else if (!isShooting || isReloading) {
-                shotCount = 0; 
             }
 
             const targetFov = isAiming ? currentWeapon.adsFov : 75;
