@@ -385,6 +385,7 @@
 
             camera.add(gunGroup);
             isShooting = false; isAiming = false; isSwinging = false; shotCount = 0;
+            if (controls) controls.pointerSpeed = 1.0; // Reset sensitivity
             camera.fov = 75; camera.updateProjectionMatrix();
             document.getElementById('weapon-info').innerText = currentWeapon.name;
             updateAmmoUI();
@@ -454,11 +455,13 @@
             const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.4), pMat);
             body.position.y = 0.6;
             body.castShadow = true;
+            body.userData.isHead = false; // Added tag for body hit
             pGroup.add(body);
             
             const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), pMat);
             head.position.y = 1.45;
             head.castShadow = true;
+            head.userData.isHead = true; // Added tag for head hit
             pGroup.add(head);
 
             // Create a pivot for the weapon to handle vertical look pitch
@@ -498,6 +501,7 @@
         let isPaused = false; 
 
         const controls = new PointerLockControls(camera, document.body);
+        controls.pointerSpeed = 1.0;
 
         controls.addEventListener('lock', () => {
             isPaused = false;
@@ -512,6 +516,7 @@
             isPaused = true;
             document.getElementById('ui-layer').style.display = 'none';
             isShooting = false; isAiming = false; isSwinging = false; shotCount = 0;
+            controls.pointerSpeed = 1.0; // Reset sens just in case
             for (let k in keys) keys[k] = false;
             if (inGame) {
                 document.getElementById('pause-menu').style.display = 'flex';
@@ -600,7 +605,6 @@
             if (players[p.id]) { 
                 players[p.id].position.copy(p.position); 
                 players[p.id].rotation.y = p.rotation.y; 
-                // Sync weapon pitch
                 if(p.rotation.x !== undefined) players[p.id].userData.weaponPivot.rotation.x = p.rotation.x;
             } 
         });
@@ -647,12 +651,10 @@
                 const pData = pModel.userData;
                 if (pData.currentWeaponIndex !== undefined && !WEAPONS[pData.currentWeaponIndex].isMelee) {
                     
-                    // Apply visual recoil to 3rd person gun
                     pData.recoil.z = 0.15;
                     pData.recoil.x = 0.15;
 
                     const fromPos = new THREE.Vector3();
-                    // Get world position of the specific 3rd person weapon
                     pData.tpWeapons[pData.currentWeaponIndex].getWorldPosition(fromPos); 
                     createTracer(fromPos, data.toPosition);
                 }
@@ -667,6 +669,7 @@
         function reload() {
             if (currentWeapon.isMelee || isReloading || currentWeapon.currentAmmo === currentWeapon.maxAmmo || !inGame) return;
             isReloading = true; isAiming = false; shotCount = 0; reloadStartTime = performance.now();
+            controls.pointerSpeed = 1.0; // Reset sens just in case
             socket.emit('playerAction', { action: 'reload' });
         }
 
@@ -734,13 +737,18 @@
                     if (currentWeapon.isMelee && intersects[0].distance > currentWeapon.range) continue;
 
                     hitPoint = intersects[0].point;
-                    let rootObject = intersects[0].object;
+                    let hitObject = intersects[0].object;
+                    let isHeadshot = hitObject.userData.isHead === true; // Check for head tag
+
+                    let rootObject = hitObject;
 
                     if (rootObject === floor || envGroup.children.includes(rootObject)) { 
                         createDecal(intersects[0], currentWeapon.isMelee); 
                     } else {
                         while (rootObject.parent && rootObject.userData.id === undefined) rootObject = rootObject.parent;
-                        if (rootObject.userData.id) socket.emit('registerHit', { targetId: rootObject.userData.id, damage: currentWeapon.damage });
+                        if (rootObject.userData.id) {
+                            socket.emit('registerHit', { targetId: rootObject.userData.id, damage: currentWeapon.damage, isHeadshot: isHeadshot });
+                        }
                     }
                     
                     if (!currentWeapon.isMelee) {
@@ -773,12 +781,18 @@
                 }
                 if (!currentWeapon.isMelee && currentWeapon.currentAmmo === 0) reload();
             }
-            if (e.button === 2 && !isReloading && !currentWeapon.isMelee) isAiming = true; 
+            if (e.button === 2 && !isReloading && !currentWeapon.isMelee) {
+                isAiming = true; 
+                controls.pointerSpeed = 0.3; // Lower sensitivity when aiming
+            }
         });
         
         document.addEventListener('mouseup', (e) => {
             if (e.button === 0) { isShooting = false; shotCount = 0; }
-            if (e.button === 2) isAiming = false;
+            if (e.button === 2) {
+                isAiming = false;
+                controls.pointerSpeed = 1.0; // Restore sensitivity
+            }
         });
 
         window.addEventListener('wheel', (e) => {
@@ -919,6 +933,8 @@
                 if (keys.d) inputVelocity.x = 1;
 
                 inputVelocity.normalize();
+                
+                // Speed slows down to 40% when aiming down sights
                 const speed = isAiming ? moveSpeed * 0.4 : moveSpeed; 
                 inputVelocity.multiplyScalar(speed * delta);
 
