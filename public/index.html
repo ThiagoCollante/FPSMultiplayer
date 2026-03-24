@@ -418,9 +418,10 @@
             }
         });
 
-        // --- SHOOTING & COMBAT MATH ---
+        // --- SHOOTING MATH ---
         const raycaster = new THREE.Raycaster();
         let lastFireTime = 0, shotCount = 0, reloadStartTime = 0;
+
         const gunRecoilOffset = new THREE.Vector3(); const gunRecoilRot = new THREE.Euler();
 
         function reload() {
@@ -552,7 +553,6 @@
             if (keys.hasOwnProperty(key)) keys[key] = false;
         });
 
-        // --- RENDER LOOP ---
         const moveSpeed = 50.0;
         const velocity = new THREE.Vector3(); const direction = new THREE.Vector3();
         let prevTime = performance.now();
@@ -617,15 +617,17 @@
             }
 
             if (isReloading) {
-                // FLIP RELOAD ANIMATION
                 let progress = (time - reloadStartTime) / currentWeapon.reloadTime;
                 if (progress >= 1) { progress = 1; isReloading = false; currentWeapon.currentAmmo = currentWeapon.maxAmmo; updateAmmoUI(); }
                 gunGroup.position.copy(currentWeapon.hipPos);
                 
-                // Fast Multiple Backflips
+                gunGroup.rotation.order = 'ZYX'; 
                 const totalFlips = Math.ceil(currentWeapon.reloadTime / 400); 
-                gunGroup.rotation.set(-progress * Math.PI * 2 * totalFlips, 0, 0); 
+                const sideTilt = Math.sin(progress * Math.PI) * 0.8; 
+                const inwardTilt = Math.sin(progress * Math.PI) * 0.4; 
+                gunGroup.rotation.set(-progress * Math.PI * 2 * totalFlips, inwardTilt, sideTilt); 
             } else if (isSwinging) {
+                gunGroup.rotation.order = 'XYZ'; 
                 let progress = (time - swingStartTime) / (currentWeapon.fireRate * 1000);
                 if (progress >= 1) { progress = 1; isSwinging = false; }
                 const swingAng = Math.sin(progress * Math.PI); 
@@ -634,6 +636,7 @@
                 gunGroup.position.add(new THREE.Vector3(bobX - swingAng * 0.15, bobY, gunRecoilOffset.z));
                 gunGroup.rotation.set(-swingAng * 0.5, swingAng * 1.5, -swingAng * 0.8);
             } else {
+                gunGroup.rotation.order = 'XYZ'; 
                 gunGroup.position.copy(currentGunBasePos);
                 gunGroup.position.add(new THREE.Vector3(bobX + gunRecoilOffset.x, bobY + gunRecoilOffset.y, gunRecoilOffset.z));
                 gunGroup.rotation.set(gunRecoilRot.x, gunRecoilRot.y, gunRecoilRot.z);
