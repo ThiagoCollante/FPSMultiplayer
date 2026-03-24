@@ -115,7 +115,6 @@
 
         // --- SCENE SETUP ---
         const scene = new THREE.Scene();
-        // Changed background to a bright sky blue
         scene.background = new THREE.Color(0x87ceeb);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -128,7 +127,6 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
-        // Increased Ambient Light intensity and set it to pure white
         scene.add(new THREE.AmbientLight(0xffffff, 0.9));
 
         // --- TEXTURE GENERATORS ---
@@ -390,6 +388,9 @@
             camera.fov = 75; camera.updateProjectionMatrix();
             document.getElementById('weapon-info').innerText = currentWeapon.name;
             updateAmmoUI();
+
+            // Notify server of weapon change
+            socket.emit('changeWeapon', index);
         }
 
         const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
@@ -432,9 +433,17 @@
         }
 
         // --- PLAYER MODEL BUILDER ---
-        function buildPlayerModel(id, baseColor) {
+        function buildPlayerModel(id, baseColor, wIndex = 0) {
             const pGroup = new THREE.Group();
-            pGroup.userData = { id: id };
+            
+            // Setup User Data to hold animation state
+            pGroup.userData = { 
+                id: id, 
+                isReloading: false, 
+                isSwinging: false, 
+                animStartTime: 0, 
+                recoil: new THREE.Vector3() 
+            };
             
             const pMat = new THREE.MeshStandardMaterial({ 
                 color: baseColor, 
@@ -451,6 +460,26 @@
             head.position.y = 1.45;
             head.castShadow = true;
             pGroup.add(head);
+
+            // Create a pivot for the weapon to handle vertical look pitch
+            const weaponPivot = new THREE.Group();
+            weaponPivot.position.set(0, 1.2, 0); // Shoulder/chest level
+            pGroup.add(weaponPivot);
+            pGroup.userData.weaponPivot = weaponPivot;
+
+            // Generate full 3rd person weapon meshes and attach to pivot
+            const tpWeapons = [];
+            WEAPONS.forEach((w, idx) => {
+                const wModel = w.buildFunc();
+                // Position weapon as if held to the right side
+                wModel.position.set(0.3, -0.2, -0.4); 
+                wModel.visible = (idx === wIndex); 
+                weaponPivot.add(wModel);
+                tpWeapons.push(wModel);
+            });
+            
+            pGroup.userData.tpWeapons = tpWeapons;
+            pGroup.userData.currentWeaponIndex = wIndex;
             
             return pGroup;
         }
@@ -554,20 +583,54 @@
             for (let id in players) { scene.remove(players[id]); delete players[id]; } 
             for (let id in data.players) {
                 if (id === socket.id) { updateMyHealth(data.players[id].health); continue; }
-                const pModel = buildPlayerModel(data.players[id].id, data.players[id].color);
+                const pModel = buildPlayerModel(data.players[id].id, data.players[id].color, data.players[id].weaponIndex);
                 pModel.position.copy(data.players[id].position); pModel.rotation.y = data.players[id].rotation.y;
+                if(data.players[id].rotation.x !== undefined) pModel.userData.weaponPivot.rotation.x = data.players[id].rotation.x;
                 scene.add(pModel); players[data.players[id].id] = pModel;
             }
         });
 
         socket.on('newPlayer', (p) => {
-            const pModel = buildPlayerModel(p.id, p.color); 
+            const pModel = buildPlayerModel(p.id, p.color, p.weaponIndex); 
             pModel.position.copy(p.position); pModel.rotation.y = p.rotation.y;
             scene.add(pModel); players[p.id] = pModel;
         });
-        socket.on('playerMoved', (p) => { if (players[p.id]) { players[p.id].position.copy(p.position); players[p.id].rotation.y = p.rotation.y; } });
+
+        socket.on('playerMoved', (p) => { 
+            if (players[p.id]) { 
+                players[p.id].position.copy(p.position); 
+                players[p.id].rotation.y = p.rotation.y; 
+                // Sync weapon pitch
+                if(p.rotation.x !== undefined) players[p.id].userData.weaponPivot.rotation.x = p.rotation.x;
+            } 
+        });
+
+        socket.on('weaponChanged', (data) => {
+            if (players[data.id]) {
+                const pData = players[data.id].userData;
+                pData.currentWeaponIndex = data.weaponIndex;
+                pData.tpWeapons.forEach((w, idx) => w.visible = (idx === data.weaponIndex));
+                pData.isReloading = false;
+                pData.isSwinging = false;
+            }
+        });
+
+        socket.on('playerAction', (data) => {
+            if (players[data.id]) {
+                const pData = players[data.id].userData;
+                if (data.action === 'reload') {
+                    pData.isReloading = true;
+                    pData.animStartTime = performance.now();
+                } else if (data.action === 'swing') {
+                    pData.isSwinging = true;
+                    pData.animStartTime = performance.now();
+                }
+            }
+        });
+
         socket.on('playerDisconnected', (id) => { if (players[id]) { scene.remove(players[id]); delete players[id]; } });
         socket.on('updateHealth', (data) => { if (data.id === socket.id) updateMyHealth(data.health); });
+        
         socket.on('youDied', () => {
             deathScreen.style.opacity = '1'; setTimeout(() => { deathScreen.style.opacity = '0'; }, 1500);
             updateMyHealth(100); 
@@ -575,11 +638,24 @@
             updateAmmoUI(); 
             velocity.set(0,0,0); camera.position.set(0, 1.7, 0); shotCount = 0; isSwinging = false;
         });
+        
         socket.on('playerRespawned', (data) => { if (data.id !== socket.id && players[data.id]) players[data.id].position.copy(data.position); });
+        
         socket.on('drawLaser', (data) => {
-            if (players[data.fromId] && data.toPosition && !WEAPONS[3].isMelee) {
-                const fromPos = new THREE.Vector3().copy(players[data.fromId].position); fromPos.y += 1.5; 
-                createTracer(fromPos, data.toPosition);
+            if (players[data.fromId] && data.toPosition) {
+                const pModel = players[data.fromId];
+                const pData = pModel.userData;
+                if (pData.currentWeaponIndex !== undefined && !WEAPONS[pData.currentWeaponIndex].isMelee) {
+                    
+                    // Apply visual recoil to 3rd person gun
+                    pData.recoil.z = 0.15;
+                    pData.recoil.x = 0.15;
+
+                    const fromPos = new THREE.Vector3();
+                    // Get world position of the specific 3rd person weapon
+                    pData.tpWeapons[pData.currentWeaponIndex].getWorldPosition(fromPos); 
+                    createTracer(fromPos, data.toPosition);
+                }
             }
         });
 
@@ -591,6 +667,7 @@
         function reload() {
             if (currentWeapon.isMelee || isReloading || currentWeapon.currentAmmo === currentWeapon.maxAmmo || !inGame) return;
             isReloading = true; isAiming = false; shotCount = 0; reloadStartTime = performance.now();
+            socket.emit('playerAction', { action: 'reload' });
         }
 
         function getSprayNDC(index) {
@@ -630,6 +707,7 @@
                 isSwinging = true;
                 swingStartTime = performance.now();
                 camera.rotation.x += 0.002; 
+                socket.emit('playerAction', { action: 'swing' });
             }
 
             let primaryHitPoint = null; 
@@ -863,6 +941,7 @@
                 bobX = Math.cos(time * 0.006) * 0.005; bobY = Math.sin(time * 0.012) * 0.01;
             }
 
+            // Local Gun Animations
             if (isReloading) {
                 let progress = (time - reloadStartTime) / currentWeapon.reloadTime;
                 if (progress >= 1) { progress = 1; isReloading = false; currentWeapon.currentAmmo = currentWeapon.maxAmmo; updateAmmoUI(); }
@@ -891,9 +970,45 @@
             }
 
             if (inGame && controls.isLocked) {
-                const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir); const pureYaw = Math.atan2(-camDir.x, -camDir.z); 
-                socket.emit('playerMovement', { position: { x: camera.position.x, y: camera.position.y - 1.7, z: camera.position.z }, rotation: { y: pureYaw } });
+                const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir); 
+                const pureYaw = Math.atan2(-camDir.x, -camDir.z); 
+                const purePitch = Math.asin(camDir.y); // Send vertical look angle
+                socket.emit('playerMovement', { position: { x: camera.position.x, y: camera.position.y - 1.7, z: camera.position.z }, rotation: { y: pureYaw, x: purePitch } });
             }
+
+            // Remote Player Gun Animations
+            for (let id in players) {
+                const pModel = players[id];
+                const pData = pModel.userData;
+                const wpIndex = pData.currentWeaponIndex;
+                if (wpIndex !== undefined) {
+                    const wProps = WEAPONS[wpIndex];
+                    const activeGun = pData.tpWeapons[wpIndex];
+
+                    // Recoil Recovery
+                    pData.recoil.lerp(new THREE.Vector3(0,0,0), 0.2);
+
+                    if (pData.isReloading) {
+                        let progress = (time - pData.animStartTime) / wProps.reloadTime;
+                        if (progress >= 1) { progress = 1; pData.isReloading = false; }
+                        const totalFlips = Math.ceil(wProps.reloadTime / 400);
+                        const sideTilt = Math.sin(progress * Math.PI) * (-55 * (Math.PI / 180));
+                        activeGun.rotation.set(-progress * Math.PI * 2 * totalFlips, 0, sideTilt);
+                        activeGun.position.set(0.3, -0.2, -0.4);
+                    } else if (pData.isSwinging) {
+                        let progress = (time - pData.animStartTime) / (wProps.fireRate * 1000);
+                        if (progress >= 1) { progress = 1; pData.isSwinging = false; }
+                        const swingAng = Math.sin(progress * Math.PI);
+                        activeGun.rotation.set(-swingAng * 0.5, swingAng * 1.5, -swingAng * 0.8);
+                        activeGun.position.set(0.3, -0.2, -0.4).add(new THREE.Vector3(0, 0, pData.recoil.z));
+                    } else {
+                        // Apply recoil to resting position
+                        activeGun.rotation.set(pData.recoil.x, 0, 0);
+                        activeGun.position.set(0.3, -0.2, -0.4).add(new THREE.Vector3(0, pData.recoil.y, pData.recoil.z));
+                    }
+                }
+            }
+
             renderer.render(scene, camera);
         }
         animate();
