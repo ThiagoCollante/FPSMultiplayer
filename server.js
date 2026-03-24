@@ -7,18 +7,17 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-// Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// State management for rooms and players
+// Rooms now store { mapId, players: {} }
 const rooms = {};
 
-// Helper function to broadcast the list of active rooms to the main menu
 function broadcastRoomList() {
     const activeRooms = Object.keys(rooms).map(roomName => {
         return { 
             name: roomName, 
-            players: Object.keys(rooms[roomName]).length 
+            players: Object.keys(rooms[roomName].players).length,
+            mapId: rooms[roomName].mapId
         };
     });
     io.emit('availableRooms', activeRooms);
@@ -27,49 +26,53 @@ function broadcastRoomList() {
 io.on('connection', (socket) => {
     let currentRoom = null;
 
-    // Send the room list to newly connected users
     broadcastRoomList();
 
-    socket.on('joinRoom', (roomName) => {
-        // Clean up previous room if switching
+    // Joining now accepts an object with the mapId
+    socket.on('joinRoom', (data) => {
         if (currentRoom) leaveCurrentRoom(socket);
 
+        const roomName = data.roomName;
         socket.join(roomName);
         currentRoom = roomName;
         
-        if (!rooms[currentRoom]) rooms[currentRoom] = {};
+        // If room doesn't exist, create it and set the map
+        if (!rooms[currentRoom]) {
+            rooms[currentRoom] = {
+                mapId: data.mapId || 1,
+                players: {}
+            };
+        }
         
-        // Initialize player data
-        rooms[currentRoom][socket.id] = {
+        rooms[currentRoom].players[socket.id] = {
             id: socket.id,
             position: { x: 0, y: 0, z: 0 },
             rotation: { y: 0 },
-            color: Math.floor(Math.random() * 16777215), // Random hex color
+            color: Math.floor(Math.random() * 16777215), 
             health: 100
         };
 
-        // Send current room state to the new player
-        socket.emit('currentPlayers', rooms[currentRoom]);
-        // Notify others in the room
-        socket.to(currentRoom).emit('newPlayer', rooms[currentRoom][socket.id]);
+        // Send the current room state (including the map) to the new player
+        socket.emit('roomState', {
+            mapId: rooms[currentRoom].mapId,
+            players: rooms[currentRoom].players
+        });
         
-        console.log(`[+] ${socket.id} joined ${roomName}`);
+        socket.to(currentRoom).emit('newPlayer', rooms[currentRoom].players[socket.id]);
+        
+        console.log(`[+] ${socket.id} joined ${roomName} (Map ${rooms[currentRoom].mapId})`);
         broadcastRoomList();
     });
 
     socket.on('playerMovement', (movementData) => {
-        if (currentRoom && rooms[currentRoom][socket.id]) {
-            rooms[currentRoom][socket.id].position = movementData.position;
-            rooms[currentRoom][socket.id].rotation = movementData.rotation;
-            
-            // Broadcast movement to all OTHER players in the room
-            socket.to(currentRoom).emit('playerMoved', rooms[currentRoom][socket.id]);
+        if (currentRoom && rooms[currentRoom].players[socket.id]) {
+            rooms[currentRoom].players[socket.id].position = movementData.position;
+            rooms[currentRoom].players[socket.id].rotation = movementData.rotation;
+            socket.to(currentRoom).emit('playerMoved', rooms[currentRoom].players[socket.id]);
         }
     });
 
-    // --- Combat System ---
     socket.on('playerShot', (data) => {
-        // Broadcast the tracer/laser visual to everyone else
         socket.to(currentRoom).emit('drawLaser', { 
             fromId: socket.id, 
             toPosition: data.hitPoint 
@@ -77,53 +80,31 @@ io.on('connection', (socket) => {
     });
 
     socket.on('registerHit', (data) => {
-        if (currentRoom && rooms[currentRoom][data.targetId]) {
-            const target = rooms[currentRoom][data.targetId];
-            
-            // Deduct health based on the weapon's damage, defaulting to 25
+        if (currentRoom && rooms[currentRoom].players[data.targetId]) {
+            const target = rooms[currentRoom].players[data.targetId];
             target.health -= (data.damage || 25); 
 
             if (target.health <= 0) {
-                // Player died
-                target.health = 100; // Reset health for respawn
-                target.position = { x: 0, y: 0, z: 0 }; // Reset position to center
-                
-                // Notify the victim
+                target.health = 100; 
+                target.position = { x: 0, y: 0, z: 0 }; 
                 io.to(data.targetId).emit('youDied');
-                // Notify the room that the player respawned
                 io.to(currentRoom).emit('playerRespawned', target);
             } else {
-                // Just update health UI for everyone
-                io.to(currentRoom).emit('updateHealth', { 
-                    id: data.targetId, 
-                    health: target.health 
-                });
+                io.to(currentRoom).emit('updateHealth', { id: data.targetId, health: target.health });
             }
         }
     });
 
-    // --- Room Management ---
-    socket.on('leaveRoom', () => {
-        leaveCurrentRoom(socket);
-        currentRoom = null;
-    });
+    socket.on('leaveRoom', () => { leaveCurrentRoom(socket); currentRoom = null; });
+    socket.on('disconnect', () => { leaveCurrentRoom(socket); console.log(`[-] ${socket.id} disconnected`); });
 
-    socket.on('disconnect', () => {
-        leaveCurrentRoom(socket);
-        console.log(`[-] ${socket.id} disconnected`);
-    });
-
-    // Helper to cleanly remove a player and clean up empty rooms
     function leaveCurrentRoom(sock) {
         if (currentRoom && rooms[currentRoom]) {
             sock.leave(currentRoom);
-            delete rooms[currentRoom][sock.id];
-            
-            // Tell others the player left
+            delete rooms[currentRoom].players[sock.id];
             io.to(currentRoom).emit('playerDisconnected', sock.id);
             
-            // Delete the room if it's empty
-            if (Object.keys(rooms[currentRoom]).length === 0) {
+            if (Object.keys(rooms[currentRoom].players).length === 0) {
                 delete rooms[currentRoom];
             }
             broadcastRoomList();
@@ -131,6 +112,5 @@ io.on('connection', (socket) => {
     }
 });
 
-// Use the dynamic port for Render, or 3000 for local testing
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server active on port ${PORT}`));
