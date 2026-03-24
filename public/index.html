@@ -151,17 +151,14 @@
         createWall(1, 10, 50, 25, 5, 0);  
         scene.add(envGroup);
 
-        // --- NEW REALISTIC TACTICAL GUN MODEL ---
         const gunGroup = new THREE.Group();
         
-        // Materials
         const polymerMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8, metalness: 0.2 });
         const metalMat = new THREE.MeshStandardMaterial({ color: 0x2c2f33, roughness: 0.5, metalness: 0.7 });
         const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.6, metalness: 0.8 });
         const glassMat = new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
         const dotMat = new THREE.MeshBasicMaterial({ color: 0xff0000 }); 
 
-        // 1. Receivers
         const upperReceiver = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.08, 0.3), metalMat);
         upperReceiver.position.set(0, 0.04, 0); gunGroup.add(upperReceiver);
 
@@ -171,21 +168,18 @@
         const ejectionPort = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.08), darkMetalMat);
         ejectionPort.position.set(0.005, 0.04, 0.02); gunGroup.add(ejectionPort);
 
-        // 2. Barrel & Muzzle
         const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.012, 0.45, 16), darkMetalMat);
         barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.04, -0.25); gunGroup.add(barrel);
 
         const muzzleBrake = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.06, 12), metalMat);
         muzzleBrake.rotation.x = Math.PI / 2; muzzleBrake.position.set(0, 0.04, -0.48); gunGroup.add(muzzleBrake);
 
-        // 3. Handguard (MLOK style)
         const handguard = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.3, 8), polymerMat);
         handguard.rotation.x = Math.PI / 2; handguard.position.set(0, 0.04, -0.2); gunGroup.add(handguard);
         
         const topRail = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.01, 0.3), darkMetalMat);
         topRail.position.set(0, 0.075, -0.2); gunGroup.add(topRail);
 
-        // 4. Stock & Buffer Tube
         const bufferTube = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.2, 12), metalMat);
         bufferTube.rotation.x = Math.PI / 2; bufferTube.position.set(0, 0.04, 0.25); gunGroup.add(bufferTube);
 
@@ -195,7 +189,6 @@
         const stockPad = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.14, 0.02), darkMetalMat);
         stockPad.position.set(0, 0, 0.38); gunGroup.add(stockPad);
 
-        // 5. Grip & Trigger
         const grip = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.12, 0.055), polymerMat);
         grip.rotation.x = -Math.PI / 12; grip.position.set(0, -0.09, 0.1); gunGroup.add(grip);
 
@@ -205,18 +198,15 @@
         const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.03, 0.01), metalMat);
         trigger.position.set(0, -0.05, 0.06); gunGroup.add(trigger);
 
-        // 6. Magazine (Curved look)
         const magTop = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.07), polymerMat);
         magTop.position.set(0, -0.08, -0.03); magTop.rotation.x = Math.PI / 24; gunGroup.add(magTop);
 
         const magBottom = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.07), polymerMat);
         magBottom.position.set(0, -0.16, -0.045); magBottom.rotation.x = Math.PI / 8; gunGroup.add(magBottom);
 
-        // 7. Tactical Foregrip
         const foregrip = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.08, 0.035), polymerMat);
         foregrip.position.set(0, -0.04, -0.25); foregrip.rotation.x = -Math.PI / 16; gunGroup.add(foregrip);
 
-        // 8. Holographic Red Dot Sight
         const sightBase = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.06), metalMat);
         sightBase.position.set(0, 0.09, 0); gunGroup.add(sightBase);
 
@@ -235,7 +225,6 @@
         const redDot = new THREE.Mesh(new THREE.CircleGeometry(0.0015, 8), dotMat);
         redDot.position.set(0, 0.11, 0.011); gunGroup.add(redDot);
 
-        // Flash Canvas
         const flashCanvas = document.createElement('canvas');
         flashCanvas.width = 128; flashCanvas.height = 128;
         const fCtx = flashCanvas.getContext('2d');
@@ -248,20 +237,17 @@
 
         const flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, transparent: true, opacity: 0 }));
         flashSprite.scale.set(0.4, 0.4, 0.4); 
-        flashSprite.position.set(0, 0.04, -0.55); // Adjusted for longer barrel
+        flashSprite.position.set(0, 0.04, -0.55); 
         gunGroup.add(flashSprite);
 
         const flashLight = new THREE.PointLight(0xffaa00, 0, 5);
         flashLight.position.copy(flashSprite.position); gunGroup.add(flashLight);
 
-        // ADS Coordinates calibrated for the new Red Dot Sight
         const hipPosition = new THREE.Vector3(0.2, -0.2, -0.35);
         const adsPosition = new THREE.Vector3(0, -0.11, -0.25); 
         const currentGunBasePos = new THREE.Vector3().copy(hipPosition);
 
         camera.add(gunGroup);
-
-        // --- END GUN MODEL ---
 
         const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
         const tracerGeo = new THREE.CylinderGeometry(0.005, 0.005, 1, 4); tracerGeo.rotateX(Math.PI / 2);
@@ -317,6 +303,7 @@
         controls.addEventListener('unlock', () => {
             document.getElementById('ui-layer').style.display = 'none';
             isShooting = false; isAiming = false;
+            shotCount = 0; // Ensures spray pattern resets if game paused
             
             for (let k in keys) keys[k] = false;
 
@@ -402,6 +389,7 @@
         socket.on('youDied', () => {
             deathScreen.style.opacity = '1'; setTimeout(() => { deathScreen.style.opacity = '0'; }, 1500);
             updateMyHealth(100); ammo = maxAmmo; updateAmmoUI(); velocity.set(0,0,0); camera.position.set(0, 1.7, 0);
+            shotCount = 0;
         });
 
         socket.on('playerRespawned', (data) => { if (data.id !== socket.id && players[data.id]) players[data.id].position.copy(data.position); });
@@ -415,7 +403,7 @@
 
         const raycaster = new THREE.Raycaster();
         const FIRE_RATE = 0.09; 
-        let lastFireTime = 0, shotCount = 0, recoilRecoveryTimer = 0;
+        let lastFireTime = 0, shotCount = 0;
         let isShooting = false, isAiming = false, isReloading = false;
         let ammo = 30; const maxAmmo = 30;
 
@@ -431,6 +419,7 @@
             if (isReloading || ammo === maxAmmo || !inGame) return;
             isReloading = true;
             isAiming = false; 
+            shotCount = 0; 
             
             gunGroup.rotation.x = -0.5; 
             setTimeout(() => { ammo = maxAmmo; isReloading = false; updateAmmoUI(); }, 1500);
@@ -517,6 +506,7 @@
         document.addEventListener('mouseup', (e) => {
             if (e.button === 0) {
                 isShooting = false;
+                shotCount = 0; // INSTANT RESET OF SPRAY PATTERN
                 document.getElementById('ch-top').style.transform = `translateY(0)`;
                 document.getElementById('ch-bottom').style.transform = `translateY(0)`;
                 document.getElementById('ch-left').style.transform = `translateX(0)`;
@@ -552,11 +542,11 @@
 
             if (isShooting && !isReloading && controls.isLocked) {
                 if (time / 1000 - lastFireTime > FIRE_RATE) {
-                    fireBullet(); lastFireTime = time / 1000; recoilRecoveryTimer = 0;
+                    fireBullet(); lastFireTime = time / 1000; 
                 }
             } else {
-                recoilRecoveryTimer += delta;
-                if (recoilRecoveryTimer > 0.15) shotCount = Math.max(0, shotCount - delta * 25); 
+                // Failsafe to ensure spray drops to 0 if not shooting or if reloading
+                shotCount = 0; 
             }
 
             crosshair.style.opacity = isAiming ? '0' : '0.8';
@@ -564,8 +554,9 @@
             const targetGunPos = (isAiming && !isReloading) ? adsPosition : hipPosition;
             currentGunBasePos.lerp(targetGunPos, 0.15); 
             
-            gunRecoilOffset.lerp(new THREE.Vector3(0,0,0), 0.15); 
-            gunRecoilRot.x *= 0.8; 
+            // FASTER VISUAL RECOIL SNAP-BACK
+            gunRecoilOffset.lerp(new THREE.Vector3(0,0,0), 0.3); 
+            gunRecoilRot.x *= 0.5; 
 
             if (flashSprite.material.opacity > 0) {
                 flashSprite.material.opacity -= delta * 15;
