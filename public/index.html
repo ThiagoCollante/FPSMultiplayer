@@ -202,43 +202,28 @@
             attachFlash(grp, -0.6, 0.02); return grp;
         }
 
-        // --- FIXED REALISTIC KNIFE MODEL ---
         function buildKnifeModel() {
             const grp = new THREE.Group();
-            
-            // Handle
             addPart(grp, new THREE.BoxGeometry(0.02, 0.12, 0.03), polymerMat, 0, 0, 0);
-            // Texture scales on grip
             addPart(grp, new THREE.BoxGeometry(0.022, 0.02, 0.032), darkMetalMat, 0, 0.03, 0);
             addPart(grp, new THREE.BoxGeometry(0.022, 0.02, 0.032), darkMetalMat, 0, -0.03, 0);
-            // Pommel
             addPart(grp, new THREE.BoxGeometry(0.025, 0.015, 0.035), metalMat, 0, -0.065, 0);
-            // Crossguard
             addPart(grp, new THREE.BoxGeometry(0.03, 0.01, 0.045), metalMat, 0, 0.065, 0);
-            
-            // Thick Spine
             addPart(grp, new THREE.BoxGeometry(0.008, 0.14, 0.015), darkMetalMat, 0, 0.14, -0.005);
-            // Thin Edge
             addPart(grp, new THREE.BoxGeometry(0.002, 0.14, 0.015), metalMat, 0, 0.14, 0.01);
-            // Pointed Tip
             addPart(grp, new THREE.ConeGeometry(0.015, 0.06, 4), metalMat, 0, 0.23, 0.0025, 0, Math.PI/4, 0);
-
-            // FIX: Rotates the knife so it points into the screen (-Z) and angled slightly up/inward
+            
             grp.rotation.set(-Math.PI / 2.5, Math.PI / 10, Math.PI / 12);
             grp.position.set(0, -0.05, -0.1);
-            
-            const container = new THREE.Group();
-            container.add(grp);
+            const container = new THREE.Group(); container.add(grp);
             return container;
         }
 
-        // --- WEAPONS WITH MELEE SUPPORT ---
+        // --- WEAPONS ARRAY ---
         const WEAPONS = [
             { id: 1, name: "Assault Rifle", isMelee: false, maxAmmo: 30, currentAmmo: 30, fireRate: 0.09, damage: 25, pellets: 1, auto: true, reloadTime: 1500, adsFov: 50, hipPos: new THREE.Vector3(0.2, -0.2, -0.35), adsPos: new THREE.Vector3(0, -0.11, -0.25), model: buildARModel() },
             { id: 2, name: "Sniper Rifle", isMelee: false, maxAmmo: 5, currentAmmo: 5, fireRate: 1.5, damage: 100, pellets: 1, auto: false, reloadTime: 2500, adsFov: 15, hipPos: new THREE.Vector3(0.25, -0.2, -0.3), adsPos: new THREE.Vector3(0, -0.12, -0.15), model: buildSniperModel() },
             { id: 3, name: "Shotgun", isMelee: false, maxAmmo: 8, currentAmmo: 8, fireRate: 0.8, damage: 15, pellets: 8, auto: false, reloadTime: 2000, adsFov: 60, hipPos: new THREE.Vector3(0.25, -0.25, -0.35), adsPos: new THREE.Vector3(0, -0.055, -0.2), model: buildShotgunModel() },
-            
-            // FIX: Adjusted Knife hipPos to bring it comfortably onto the screen
             { id: 4, name: "Tactical Knife", isMelee: true, range: 2.5, maxAmmo: Infinity, currentAmmo: Infinity, fireRate: 0.5, damage: 50, pellets: 1, auto: false, reloadTime: 0, adsFov: 75, hipPos: new THREE.Vector3(0.15, -0.15, -0.25), adsPos: new THREE.Vector3(0.15, -0.15, -0.25), model: buildKnifeModel() }
         ];
         
@@ -251,7 +236,6 @@
             flashSprite = gunGroup.children[gunGroup.children.length - 2];
             flashLight = gunGroup.children[gunGroup.children.length - 1];
         }
-
         camera.add(gunGroup);
 
         function equipWeapon(index) {
@@ -267,15 +251,12 @@
                 flashSprite = gunGroup.children[gunGroup.children.length - 2];
                 flashLight = gunGroup.children[gunGroup.children.length - 1];
             } else {
-                flashSprite = null;
-                flashLight = null;
+                flashSprite = null; flashLight = null;
             }
 
             camera.add(gunGroup);
-            
             isShooting = false; isAiming = false; isSwinging = false; shotCount = 0;
             camera.fov = 75; camera.updateProjectionMatrix();
-
             document.getElementById('weapon-info').innerText = currentWeapon.name;
             updateAmmoUI();
         }
@@ -291,33 +272,30 @@
 
         const bulletHoles = [];
         const holeGeo = new THREE.CircleGeometry(0.03, 8);
-        const cutGeo = new THREE.PlaneGeometry(0.015, 0.2); // Thin slash shape for knife
+        const cutGeo = new THREE.PlaneGeometry(0.015, 0.2); 
         const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
         
         function createDecal(intersection, isCut) {
             const geo = isCut ? cutGeo : holeGeo;
             const decal = new THREE.Mesh(geo, holeMat); 
             decal.position.copy(intersection.point);
-            
             const normalMatrix = new THREE.Matrix3().getNormalMatrix(intersection.object.matrixWorld);
             const worldNormal = intersection.face.normal.clone().applyMatrix3(normalMatrix).normalize();
             
             decal.lookAt(decal.position.clone().add(worldNormal)); 
-            if (isCut) decal.rotateZ(Math.random() * Math.PI); // Randomize the angle of the slash
+            if (isCut) decal.rotateZ(Math.random() * Math.PI); 
             decal.position.addScaledVector(worldNormal, 0.002);
-            
             scene.add(decal); bulletHoles.push(decal);
 
-            // Only make sparks for bullets
             if (!isCut) {
                 const spark = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.1), new THREE.MeshBasicMaterial({ map: flashTex, transparent: true, opacity: 1, blending: THREE.AdditiveBlending }));
                 spark.position.copy(decal.position); spark.lookAt(camera.position); scene.add(spark);
                 setTimeout(() => { scene.remove(spark); spark.geometry.dispose(); spark.material.dispose(); }, 50);
             }
-
             if (bulletHoles.length > 100) { scene.remove(bulletHoles.shift()); }
         }
 
+        // --- NETWORKING & GAME LOGIC ---
         const socket = io(); 
         const players = {}; 
         const ammoCounter = document.getElementById('ammo-counter');
@@ -357,7 +335,7 @@
 
         function updateAmmoUI() {
             if (currentWeapon.isMelee) {
-                ammoCounter.style.display = 'none'; // HIDE AMMO FOR KNIFE
+                ammoCounter.style.display = 'none';
             } else {
                 ammoCounter.style.display = 'block';
                 ammoCounter.innerText = `${currentWeapon.currentAmmo} / ${currentWeapon.maxAmmo * 3}`;
@@ -455,7 +433,7 @@
             const moveOffsetX = isMoving ? (Math.random() - 0.5) * moveError : 0;
             const moveOffsetY = isMoving ? (Math.random() - 0.5) * moveError : 0;
 
-            if (currentWeapon.isMelee) return new THREE.Vector2(0,0); // Melee is always center
+            if (currentWeapon.isMelee) return new THREE.Vector2(0,0); 
             if (currentWeapon.name === "Shotgun") return new THREE.Vector2(((Math.random() - 0.5) * 0.15) + moveOffsetX, ((Math.random() - 0.5) * 0.15) + moveOffsetY);
             if (currentWeapon.name === "Sniper Rifle") {
                 if (!isAiming) return new THREE.Vector2(((Math.random() - 0.5) * 0.3) + moveOffsetX, ((Math.random() - 0.5) * 0.3) + moveOffsetY);
@@ -534,8 +512,6 @@
             }
         }
 
-        document.addEventListener('contextmenu', (e) => e.preventDefault()); 
-
         document.addEventListener('mousedown', (e) => {
             if (!controls.isLocked || !inGame) return;
             if (e.button === 0) {
@@ -555,7 +531,7 @@
         });
 
         window.addEventListener('wheel', (e) => {
-            if (!controls.isLocked || !inGame || isReloading) return;
+            if (!controls.isLocked || !inGame || isReloading || isSwinging) return;
             let nextIndex = currentWeaponIndex;
             if (e.deltaY > 0) nextIndex = (currentWeaponIndex + 1) % WEAPONS.length;
             else if (e.deltaY < 0) nextIndex = (currentWeaponIndex - 1 + WEAPONS.length) % WEAPONS.length;
@@ -576,7 +552,7 @@
             if (keys.hasOwnProperty(key)) keys[key] = false;
         });
 
-        // --- RENDER LOOP & DYNAMIC CROSSHAIR ---
+        // --- RENDER LOOP ---
         const moveSpeed = 50.0;
         const velocity = new THREE.Vector3(); const direction = new THREE.Vector3();
         let prevTime = performance.now();
@@ -595,7 +571,7 @@
             let targetSpread = 14; 
             if (isAiming) targetSpread = 0; 
             else if (isMoving) targetSpread = 40; 
-            if (isShooting && !isAiming) targetSpread += (shotCount * 2); 
+            if (isShooting && !isAiming && !currentWeapon.isMelee) targetSpread += (shotCount * 2); 
 
             currentCrosshairSpread += (targetSpread - currentCrosshairSpread) * 0.2; 
 
@@ -604,14 +580,13 @@
             document.getElementById('ch-left').style.transform = `translateX(-${currentCrosshairSpread}px)`;
             document.getElementById('ch-right').style.transform = `translateX(${currentCrosshairSpread}px)`;
             
-            // CROSSHAIR ALWAYS VISIBLE WHEN HOLDING KNIFE
             document.getElementById('crosshair').style.opacity = (isAiming && !currentWeapon.isMelee) ? '0' : '0.8';
 
             const targetFov = isAiming ? currentWeapon.adsFov : 75;
             camera.fov += (targetFov - camera.fov) * 0.2;
             camera.updateProjectionMatrix();
             
-            const targetGunPos = (isAiming && !isReloading) ? currentWeapon.adsPos : currentWeapon.hipPos;
+            const targetGunPos = (isAiming && !isReloading && !currentWeapon.isMelee) ? currentWeapon.adsPos : currentWeapon.hipPos;
             currentGunBasePos.lerp(targetGunPos, 0.15); 
             
             gunRecoilOffset.lerp(new THREE.Vector3(0,0,0), 0.3); gunRecoilRot.x *= 0.5; 
@@ -642,10 +617,14 @@
             }
 
             if (isReloading) {
+                // FLIP RELOAD ANIMATION
                 let progress = (time - reloadStartTime) / currentWeapon.reloadTime;
                 if (progress >= 1) { progress = 1; isReloading = false; currentWeapon.currentAmmo = currentWeapon.maxAmmo; updateAmmoUI(); }
                 gunGroup.position.copy(currentWeapon.hipPos);
-                gunGroup.rotation.set(-progress * Math.PI * 2, 0, 0); 
+                
+                // Fast Multiple Backflips
+                const totalFlips = Math.ceil(currentWeapon.reloadTime / 400); 
+                gunGroup.rotation.set(-progress * Math.PI * 2 * totalFlips, 0, 0); 
             } else if (isSwinging) {
                 let progress = (time - swingStartTime) / (currentWeapon.fireRate * 1000);
                 if (progress >= 1) { progress = 1; isSwinging = false; }
