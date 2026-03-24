@@ -16,7 +16,7 @@
 
         #death-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 0, 0, 0.4); display: flex; justify-content: center; align-items: center; color: white; font-size: 5rem; font-weight: bold; text-transform: uppercase; letter-spacing: 10px; opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 5; }
 
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); opacity: 0.8; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); opacity: 0.8; transition: opacity 0.2s; }
         #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00ffcc; }
         #crosshair::before { top: 0; left: 9px; width: 2px; height: 20px; }
         #crosshair::after { top: 9px; left: 0; width: 20px; height: 2px; }
@@ -89,7 +89,6 @@
         import { PointerLockControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
         import { io } from "https://cdn.socket.io/4.7.2/socket.io.esm.min.js";
 
-        // --- Scene Setup ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x1a1a2e);
         scene.fog = new THREE.Fog(0x1a1a2e, 10, 50);
@@ -105,7 +104,6 @@
         const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
         scene.add(hemiLight);
         
-        // Add a directional light so the gun model has nice shading
         const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
         dirLight.position.set(10, 20, 10);
         scene.add(dirLight);
@@ -120,42 +118,36 @@
         gridHelper.position.y = 0.01;
         scene.add(gridHelper);
 
-        // --- NEW: Detailed Compound Gun Model ---
+        // --- Assault Rifle Model ---
         function createGunModel() {
             const gunGroup = new THREE.Group();
-
             const gunMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.7 });
             const darkMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
             const metalMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.8, roughness: 0.2 });
 
-            // Main Receiver (Body)
             const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.4), gunMat);
             gunGroup.add(receiver);
 
-            // Barrel
             const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.35, 12), metalMat);
             barrel.rotation.x = Math.PI / 2;
             barrel.position.set(0, 0.02, -0.35);
             gunGroup.add(barrel);
 
-            // Grip
             const grip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.08), darkMat);
-            grip.rotation.x = -Math.PI / 10; // Slant backward
+            grip.rotation.x = -Math.PI / 10;
             grip.position.set(0, -0.12, 0.12);
             gunGroup.add(grip);
 
-            // Magazine
             const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.1), darkMat);
-            mag.rotation.x = Math.PI / 16; // Slant forward
+            mag.rotation.x = Math.PI / 16;
             mag.position.set(0, -0.12, -0.05);
             gunGroup.add(mag);
 
-            // Stock (Back part)
             const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.25), gunMat);
             stock.position.set(0, -0.02, 0.3);
             gunGroup.add(stock);
 
-            // Iron Sights
+            // Sights
             const sightFront = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.04, 0.01), darkMat);
             sightFront.position.set(0, 0.08, -0.45);
             gunGroup.add(sightFront);
@@ -167,11 +159,9 @@
         }
 
         const myGun = createGunModel();
-        // Position it nicely in the bottom right of the screen
-        myGun.position.set(0.25, -0.25, -0.4); 
         camera.add(myGun);
 
-        // --- Game Variables & Socket Logic ---
+        // --- UI & State ---
         const socket = io(); 
         const players = {}; 
         
@@ -185,6 +175,7 @@
         const healthBar = document.getElementById('health-bar');
         const healthText = document.getElementById('health-text');
         const deathScreen = document.getElementById('death-screen');
+        const crosshair = document.getElementById('crosshair');
         
         let inGame = false;
         let currentRoomString = "";
@@ -194,6 +185,10 @@
 
         controls.addEventListener('unlock', () => {
             uiLayer.style.display = 'none';
+            // Stop firing/aiming when paused
+            isFiring = false; 
+            isAiming = false;
+            
             if (inGame) {
                 pauseMenu.style.display = 'flex';
                 document.getElementById('pause-room-display').innerText = currentRoomString;
@@ -207,11 +202,7 @@
             myHealth = hp;
             healthBar.style.width = `${hp}%`;
             healthText.innerText = `${hp} HP`;
-            if (hp <= 30) {
-                healthBar.style.background = '#ff4444';
-            } else {
-                healthBar.style.background = '#00ffcc';
-            }
+            healthBar.style.background = hp <= 30 ? '#ff4444' : '#00ffcc';
         }
 
         function enterGame(roomName) {
@@ -263,15 +254,12 @@
         function buildPlayerModel(id, color) {
             const group = new THREE.Group();
             group.userData = { id: id }; 
-            
             const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.8, 1), new THREE.MeshStandardMaterial({ color: color }));
             body.position.y = 0.9;
             group.add(body);
-            
             const visor = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.2, 0.3), new THREE.MeshStandardMaterial({ color: 0x111111 }));
             visor.position.set(0, 1.5, -0.45);
             group.add(visor);
-            
             return group;
         }
 
@@ -329,9 +317,22 @@
             players[p.id] = playerModel;
         }
 
-        // --- Combat Logic ---
+        // --- NEW: Automatic Firing & ADS System ---
         const raycaster = new THREE.Raycaster();
         const centerScreen = new THREE.Vector2(0, 0);
+
+        let isFiring = false;
+        let isAiming = false;
+        let lastFireTime = 0;
+        const fireRate = 100; // 100 milliseconds between shots (10 bullets per sec)
+
+        // Gun Positions
+        const hipPosition = new THREE.Vector3(0.25, -0.25, -0.4);
+        const adsPosition = new THREE.Vector3(0, -0.12, -0.3); // Aligns iron sights to center
+        
+        // Smooth Recoil Trackers
+        const recoilOffset = new THREE.Vector3(0, 0, 0);
+        let recoilRotX = 0;
 
         function createLaserVisual(start, end) {
             const material = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 2 });
@@ -339,22 +340,19 @@
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
             const line = new THREE.Line(geometry, material);
             scene.add(line);
-            setTimeout(() => { scene.remove(line); }, 100); 
+            setTimeout(() => { scene.remove(line); }, 50); 
         }
 
-        window.addEventListener('mousedown', () => {
-            if (!controls.isLocked || !inGame) return;
+        function fireGun() {
+            if (!inGame || myHealth <= 0) return;
 
-            // Updated Recoil Animation (kicks up and back)
-            myGun.position.z += 0.05;
-            myGun.rotation.x += 0.05; 
-            setTimeout(() => { 
-                myGun.position.z -= 0.05; 
-                myGun.rotation.x -= 0.05;
-            }, 60);
+            // Apply Recoil (Kicks gun up and backward)
+            recoilOffset.z += 0.04;
+            recoilOffset.y += 0.01;
+            recoilRotX += 0.05;
 
+            // Cast Ray for Hit Detection
             raycaster.setFromCamera(centerScreen, camera);
-            
             const hitTargets = [];
             for (let id in players) { hitTargets.push(players[id]); }
             
@@ -374,25 +372,38 @@
                 raycaster.ray.at(50, hitPoint = new THREE.Vector3());
             }
 
-            const gunWorldPos = new THREE.Vector3();
-            // Get position of the tip of the barrel for the laser start point
-            const barrelTip = new THREE.Vector3(0, 0.02, -0.6); 
-            myGun.localToWorld(barrelTip);
-            
+            // Draw Local Laser
+            const barrelTip = new THREE.Vector3(0, 0.02, -0.5); 
+            myGun.localToWorld(barrelTip); // Convert local barrel tip to world space
             createLaserVisual(barrelTip, hitPoint);
+            
             socket.emit('playerShot', { hitPoint: hitPoint });
+        }
+
+        // --- Mouse Inputs ---
+        window.addEventListener('mousedown', (e) => {
+            if (!controls.isLocked || !inGame) return;
+            if (e.button === 0) isFiring = true; // Left Click
+            if (e.button === 2) isAiming = true; // Right Click
         });
 
-        // --- FIXED Physics Engine ---
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 0) isFiring = false;
+            if (e.button === 2) isAiming = false;
+        });
+
+        // Prevent right-click menu from opening
+        window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+
+        // --- Movement & Physics ---
         const moveState = { forward: false, backward: false, left: false, right: false };
         let canJump = false;
         const velocity = new THREE.Vector3(), direction = new THREE.Vector3();
         const gravity = 35.0; 
 
         document.addEventListener('keydown', (e) => {
-            // Only accept input if the game is active and controls are locked
             if (!controls.isLocked) return;
-            
             if (e.code === 'KeyW') moveState.forward = true;
             if (e.code === 'KeyA') moveState.left = true;
             if (e.code === 'KeyS') moveState.backward = true;
@@ -415,35 +426,54 @@
             const time = performance.now();
             const delta = (time - prevTime) / 1000;
 
-            // 1. ALWAYS apply Friction and Gravity (even when paused)
+            // 1. Continuous Firing Logic
+            if (isFiring && (time - lastFireTime > fireRate)) {
+                fireGun();
+                lastFireTime = time;
+            }
+
+            // 2. Gun Animation & Recoil Smoothing (LERP)
+            const targetPos = isAiming ? adsPosition : hipPosition;
+            
+            // Smoothly decay recoil back to zero
+            recoilOffset.lerp(new THREE.Vector3(0, 0, 0), 0.15);
+            recoilRotX += (0 - recoilRotX) * 0.15;
+
+            // Combine target position with the recoil offset
+            myGun.position.copy(targetPos).lerp(myGun.position, 0.8).add(recoilOffset);
+            myGun.rotation.x = recoilRotX;
+
+            // Crosshair visibility
+            crosshair.style.opacity = isAiming ? '0' : '0.8';
+
+
+            // 3. Physics & Gravity
             velocity.x -= velocity.x * 10.0 * delta;
             velocity.z -= velocity.z * 10.0 * delta;
             velocity.y -= gravity * delta; 
 
-            // 2. Only apply player walking input if playing
             if (controls.isLocked) {
                 direction.z = Number(moveState.forward) - Number(moveState.backward);
                 direction.x = Number(moveState.right) - Number(moveState.left);
                 direction.normalize(); 
 
-                const speed = 50.0;
+                // Slightly slower movement when aiming down sights
+                const speed = isAiming ? 25.0 : 50.0;
                 if (moveState.forward || moveState.backward) velocity.z -= direction.z * speed * delta;
                 if (moveState.left || moveState.right) velocity.x -= direction.x * speed * delta;
             }
 
-            // 3. ALWAYS apply velocity to camera position (so you fall while paused)
             controls.moveRight(-velocity.x * delta);
             controls.moveForward(-velocity.z * delta);
             camera.position.y += (velocity.y * delta);
 
-            // 4. ALWAYS check floor collision
             if (camera.position.y < 1.6) {
                 velocity.y = 0;
                 camera.position.y = 1.6;
                 canJump = true;
             }
 
-            // 5. Network Sync (Send updates as long as you are in the room, even if paused)
+            // 4. Network Sync
             if (inGame) {
                 const camDir = new THREE.Vector3();
                 camera.getWorldDirection(camDir);
