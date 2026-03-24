@@ -28,7 +28,7 @@ io.on('connection', (socket) => {
 
     broadcastRoomList();
 
-    // Joining now accepts an object with the mapId and skin
+    // Joining now accepts an object with the mapId
     socket.on('joinRoom', (data) => {
         if (currentRoom) leaveCurrentRoom(socket);
 
@@ -49,8 +49,7 @@ io.on('connection', (socket) => {
             position: { x: 0, y: 0, z: 0 },
             rotation: { y: 0 },
             color: Math.floor(Math.random() * 16777215), 
-            health: 100,
-            skin: data.skin || 'default' // Store the chosen skin
+            health: 100
         };
 
         // Send the current room state (including the map) to the new player
@@ -61,7 +60,7 @@ io.on('connection', (socket) => {
         
         socket.to(currentRoom).emit('newPlayer', rooms[currentRoom].players[socket.id]);
         
-        console.log(`[+] ${socket.id} joined ${roomName} (Map ${rooms[currentRoom].mapId}, Skin: ${data.skin})`);
+        console.log(`[+] ${socket.id} joined ${roomName} (Map ${rooms[currentRoom].mapId})`);
         broadcastRoomList();
     });
 
