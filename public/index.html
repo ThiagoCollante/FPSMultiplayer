@@ -120,7 +120,7 @@
         // --- SCENE SETUP ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x111115);
-        scene.fog = new THREE.FogExp2(0x111115, 0.025);
+        // Fog removed here
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.y = 1.7;
@@ -369,7 +369,6 @@
         let gunGroup = null;
         let currentGunBasePos = new THREE.Vector3();
 
-        // Safe initializer to avoid crash before room is entered
         WEAPONS.forEach(w => w.model = w.buildFunc('default'));
 
         function equipWeapon(index) {
@@ -436,6 +435,33 @@
             if (decals.length > 100) { scene.remove(decals.shift()); }
         }
 
+        // --- ADDED PLAYER MODEL BUILDER WITH SKIN SUPPORT ---
+        function buildPlayerModel(id, baseColor, skinTheme = 'default') {
+            const pGroup = new THREE.Group();
+            pGroup.userData = { id: id };
+            
+            const isFacha = skinTheme === 'facha';
+            const matColor = isFacha ? 0xffd700 : baseColor; 
+            
+            const pMat = new THREE.MeshStandardMaterial({ 
+                color: matColor, 
+                roughness: 0.6, 
+                metalness: isFacha ? 0.8 : 0.1 
+            });
+            
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.4), pMat);
+            body.position.y = 0.6;
+            body.castShadow = true;
+            pGroup.add(body);
+            
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), pMat);
+            head.position.y = 1.45;
+            head.castShadow = true;
+            pGroup.add(head);
+            
+            return pGroup;
+        }
+
         // --- NETWORKING & GAME LOGIC ---
         const socket = io(); 
         const players = {}; 
@@ -447,11 +473,13 @@
         
         let inGame = false; let myHealth = 100; let isMoving = false;
         let isShooting = false, isAiming = false, isReloading = false;
-        let isSwinging = false; let swingStartTime = 0;
+        let isSwinging = false; let swingStartTime = 0; let shotCount = 0; let lastFireTime = 0;
+        let isPaused = false; // Added pause flag
 
         const controls = new PointerLockControls(camera, document.body);
 
         controls.addEventListener('lock', () => {
+            isPaused = false;
             if (inGame) {
                 document.getElementById('pause-menu').style.display = 'none';
                 document.getElementById('main-menu').style.display = 'none';
@@ -460,6 +488,7 @@
         });
 
         controls.addEventListener('unlock', () => {
+            isPaused = true;
             document.getElementById('ui-layer').style.display = 'none';
             isShooting = false; isAiming = false; isSwinging = false; shotCount = 0;
             for (let k in keys) keys[k] = false;
@@ -494,15 +523,15 @@
 
             const chosenSkin = skinInput.value;
 
-            // Rebuild the arsenal with the chosen skin for the local player
             WEAPONS.forEach(w => w.model = w.buildFunc(chosenSkin));
             
-            socket.emit('joinRoom', { roomName: finalRoomName, mapId: mapId });
+            // Send the chosen skin via websockets
+            socket.emit('joinRoom', { roomName: finalRoomName, mapId: mapId, skin: chosenSkin });
             document.getElementById('current-room-name').innerText = finalRoomName;
             inGame = true; updateMyHealth(100); 
             WEAPONS.forEach(w => w.currentAmmo = w.maxAmmo);
             
-            equipWeapon(0); // Force re-equip to attach new models
+            equipWeapon(0);
             controls.lock(); 
         }
 
@@ -515,7 +544,7 @@
             socket.emit('leaveRoom'); inGame = false;
             for (let id in players) { scene.remove(players[id]); delete players[id]; }
             camera.position.set(0, 1.7, 0);
-            if (gunGroup) camera.remove(gunGroup); // Remove gun from screen
+            if (gunGroup) camera.remove(gunGroup); 
             document.getElementById('pause-menu').style.display = 'none';
             document.getElementById('main-menu').style.display = 'flex';
         });
@@ -539,14 +568,15 @@
             for (let id in players) { scene.remove(players[id]); delete players[id]; } 
             for (let id in data.players) {
                 if (id === socket.id) { updateMyHealth(data.players[id].health); continue; }
-                const pModel = buildPlayerModel(data.players[id].id, data.players[id].color);
+                const pModel = buildPlayerModel(data.players[id].id, data.players[id].color, data.players[id].skin);
                 pModel.position.copy(data.players[id].position); pModel.rotation.y = data.players[id].rotation.y;
                 scene.add(pModel); players[data.players[id].id] = pModel;
             }
         });
 
         socket.on('newPlayer', (p) => {
-            const pModel = buildPlayerModel(p.id, p.color); pModel.position.copy(p.position); pModel.rotation.y = p.rotation.y;
+            const pModel = buildPlayerModel(p.id, p.color, p.skin); 
+            pModel.position.copy(p.position); pModel.rotation.y = p.rotation.y;
             scene.add(pModel); players[p.id] = pModel;
         });
         socket.on('playerMoved', (p) => { if (players[p.id]) { players[p.id].position.copy(p.position); players[p.id].rotation.y = p.rotation.y; } });
@@ -570,6 +600,7 @@
         // --- SHOOTING MATH ---
         const raycaster = new THREE.Raycaster();
         const gunRecoilOffset = new THREE.Vector3(); const gunRecoilRot = new THREE.Euler();
+        let reloadStartTime = 0;
 
         function reload() {
             if (currentWeapon.isMelee || isReloading || currentWeapon.currentAmmo === currentWeapon.maxAmmo || !inGame) return;
@@ -669,7 +700,7 @@
         }
 
         document.addEventListener('mousedown', (e) => {
-            if (!controls.isLocked || !inGame) return;
+            if (!controls.isLocked || !inGame || isPaused) return;
             if (e.button === 0) {
                 if (currentWeapon.auto && !currentWeapon.isMelee) { isShooting = true; } else {
                     if (performance.now() / 1000 - lastFireTime > currentWeapon.fireRate) {
@@ -687,7 +718,7 @@
         });
 
         window.addEventListener('wheel', (e) => {
-            if (!controls.isLocked || !inGame || isReloading || isSwinging) return;
+            if (!controls.isLocked || !inGame || isReloading || isSwinging || isPaused) return;
             let nextIndex = currentWeaponIndex;
             if (e.deltaY > 0) nextIndex = (currentWeaponIndex + 1) % WEAPONS.length;
             else if (e.deltaY < 0) nextIndex = (currentWeaponIndex - 1 + WEAPONS.length) % WEAPONS.length;
@@ -696,7 +727,7 @@
 
         const keys = { w: false, a: false, s: false, d: false }; let canJump = false;
         document.addEventListener('keydown', (e) => {
-            if (!controls.isLocked) return;
+            if (!controls.isLocked || isPaused) return;
             const key = e.key.toLowerCase();
             if (keys.hasOwnProperty(key)) keys[key] = true;
             if (key === 'r') reload();
@@ -767,13 +798,17 @@
         }
 
         // --- RENDER LOOP ---
-        const moveSpeed = 8.0; // FIXED TACTICAL MOVEMENT SPEED
+        const moveSpeed = 8.0; 
         const velocity = new THREE.Vector3(); const direction = new THREE.Vector3();
         let prevTime = performance.now();
         let currentCrosshairSpread = 14;
 
         function animate() {
             requestAnimationFrame(animate);
+
+            // Halt physics and game logic loop if we pause
+            if (isPaused) return;
+
             const time = performance.now();
             const delta = Math.min((time - prevTime) / 1000, 0.1);
             prevTime = time;
@@ -815,7 +850,6 @@
             if (controls.isLocked) {
                 const inputVelocity = new THREE.Vector3(0, 0, 0);
                 
-                // FIXED INVERTED CONTROLS (W goes Forward, S goes Backwards)
                 if (keys.w) inputVelocity.z = 1;
                 if (keys.s) inputVelocity.z = -1;
                 if (keys.a) inputVelocity.x = -1;
