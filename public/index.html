@@ -16,15 +16,8 @@
 
         #death-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 70, 85, 0.4); display: flex; justify-content: center; align-items: center; color: white; font-size: 5rem; font-weight: bold; text-transform: uppercase; letter-spacing: 10px; opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 20; }
 
-        /* Dynamic Crosshair */
-        #crosshair {
-            position: absolute; top: 50%; left: 50%; width: 30px; height: 30px;
-            transform: translate(-50%, -50%); pointer-events: none; z-index: 5; transition: opacity 0.15s;
-        }
-        .ch-line {
-            position: absolute; background-color: rgba(0, 255, 150, 0.9);
-            box-shadow: 0 0 2px rgba(0,0,0,0.5); transition: all 0.05s ease-out;
-        }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); pointer-events: none; z-index: 5; transition: opacity 0.15s; }
+        .ch-line { position: absolute; background-color: rgba(0, 255, 150, 0.9); box-shadow: 0 0 2px rgba(0,0,0,0.5); transition: all 0.05s ease-out; }
         #ch-top { top: 0; left: 14px; width: 2px; height: 10px; }
         #ch-bottom { bottom: 0; left: 14px; width: 2px; height: 10px; }
         #ch-left { top: 14px; left: 0; width: 10px; height: 2px; }
@@ -33,7 +26,6 @@
 
         #ammo-counter { position: absolute; bottom: 30px; right: 40px; font-size: 2.5rem; color: white; font-weight: bold; text-shadow: 2px 2px 0px rgba(0,0,0,0.5); pointer-events: none; }
 
-        /* Menus */
         .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; z-index: 15; pointer-events: auto; }
         .menu-box { background: rgba(15, 20, 25, 0.95); padding: 30px; border-radius: 8px; border: 1px solid #333; width: 400px; text-align: center; box-shadow: 0 0 20px rgba(0, 0, 0, 0.5); }
         .btn { padding: 12px 20px; background: #ff4655; color: #fff; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; transition: 0.2s; width: 100%; margin-top: 10px; font-size: 1.1rem; text-transform: uppercase; }
@@ -112,7 +104,6 @@
         import { PointerLockControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
         import { io } from "https://cdn.socket.io/4.7.2/socket.io.esm.min.js";
 
-        // --- 1. SCENE SETUP ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87ceeb);
         scene.fog = new THREE.Fog(0x87ceeb, 10, 50);
@@ -134,7 +125,6 @@
         dirLight.position.set(-10, 20, 10);
         scene.add(dirLight);
 
-        // Environment
         const canvas = document.createElement('canvas');
         canvas.width = 512; canvas.height = 512;
         const ctx = canvas.getContext('2d');
@@ -161,27 +151,43 @@
         createWall(1, 10, 50, 25, 5, 0);  
         scene.add(envGroup);
 
-        // --- 2. WEAPON & ADS POSITIONS ---
+        // --- OLD DETAILED GUN MODEL ---
         const gunGroup = new THREE.Group();
-        const darkMetal = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6, metalness: 0.5 });
-        const greyMetal = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.7 });
-        const orangeAccent = new THREE.MeshStandardMaterial({ color: 0xff4655, roughness: 0.3 });
+        const gunMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.7 });
+        const darkMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+        const metalMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.8, roughness: 0.2 });
 
-        gunGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.35), darkMetal));
-        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.015, 0.3, 8), darkMetal);
-        barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.02, -0.3); gunGroup.add(barrel);
-        const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.25), greyMetal);
-        handguard.position.set(0, 0.02, -0.2); gunGroup.add(handguard);
-        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.15, 0.07), darkMetal);
-        mag.position.set(0, -0.1, -0.05); mag.rotation.x = 0.1; gunGroup.add(mag);
-        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.12, 0.06), greyMetal);
-        grip.position.set(0, -0.1, 0.12); grip.rotation.x = -0.2; gunGroup.add(grip);
-        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.2), greyMetal);
-        stock.position.set(0, 0, 0.25); gunGroup.add(stock);
-        const sight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.04), orangeAccent);
-        sight.position.set(0, 0.075, -0.05); gunGroup.add(sight);
+        const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.4), gunMat);
+        gunGroup.add(receiver);
 
-        // Flash
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.35, 12), metalMat);
+        barrel.rotation.x = Math.PI / 2;
+        barrel.position.set(0, 0.02, -0.35);
+        gunGroup.add(barrel);
+
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.08), darkMat);
+        grip.rotation.x = -Math.PI / 10;
+        grip.position.set(0, -0.12, 0.12);
+        gunGroup.add(grip);
+
+        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.1), darkMat);
+        mag.rotation.x = Math.PI / 16;
+        mag.position.set(0, -0.12, -0.05);
+        gunGroup.add(mag);
+
+        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.25), gunMat);
+        stock.position.set(0, -0.02, 0.3);
+        gunGroup.add(stock);
+
+        const sightFront = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.04, 0.01), darkMat);
+        sightFront.position.set(0, 0.08, -0.45);
+        gunGroup.add(sightFront);
+        
+        const sightBack = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.02), darkMat);
+        sightBack.position.set(0, 0.07, 0.1);
+        gunGroup.add(sightBack);
+
+        // Flash textures
         const flashCanvas = document.createElement('canvas');
         flashCanvas.width = 128; flashCanvas.height = 128;
         const fCtx = flashCanvas.getContext('2d');
@@ -193,19 +199,19 @@
         const flashTex = new THREE.CanvasTexture(flashCanvas);
 
         const flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, transparent: true, opacity: 0 }));
-        flashSprite.scale.set(0.4, 0.4, 0.4); flashSprite.position.set(0, 0.02, -0.48); 
+        flashSprite.scale.set(0.4, 0.4, 0.4); 
+        flashSprite.position.set(0, 0.02, -0.55); // Adjusted for longer barrel
         gunGroup.add(flashSprite);
 
         const flashLight = new THREE.PointLight(0xffaa00, 0, 5);
         flashLight.position.copy(flashSprite.position); gunGroup.add(flashLight);
 
-        // ADS vs Hip Coordinates
-        const hipPosition = new THREE.Vector3(0.18, -0.2, -0.35);
-        const adsPosition = new THREE.Vector3(0, -0.075, -0.25); 
+        // Original ADS vs Hip Coordinates
+        const hipPosition = new THREE.Vector3(0.25, -0.25, -0.4);
+        const adsPosition = new THREE.Vector3(0, -0.12, -0.3); 
         gunGroup.position.copy(hipPosition);
         camera.add(gunGroup);
 
-        // --- 3. EFFECTS ---
         const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
         const tracerGeo = new THREE.CylinderGeometry(0.005, 0.005, 1, 4); tracerGeo.rotateX(Math.PI / 2);
         
@@ -238,7 +244,6 @@
             if (bulletHoles.length > 100) { scene.remove(bulletHoles.shift()); }
         }
 
-        // --- 4. NETWORKING & UI ---
         const socket = io(); 
         const players = {}; 
         const crosshair = document.getElementById('crosshair');
@@ -347,7 +352,6 @@
             }
         });
 
-        // --- 5. AIM & SPRAY LOGIC ---
         const raycaster = new THREE.Raycaster();
         const FIRE_RATE = 0.09; 
         let lastFireTime = 0, shotCount = 0, recoilRecoveryTimer = 0;
@@ -365,20 +369,21 @@
         function reload() {
             if (isReloading || ammo === maxAmmo || !inGame) return;
             isReloading = true;
+            isAiming = false; // Cancels ADS when reloading
+            
             const startRot = gunGroup.rotation.x; gunGroup.rotation.x = startRot - 0.5; 
             setTimeout(() => { ammo = maxAmmo; isReloading = false; gunGroup.rotation.x = startRot; updateAmmoUI(); }, 1500);
         }
 
         function getSprayNDC(index) {
             let x = 0, y = 0;
-            const maxVertical = 0.035; 
-            y = Math.min(index * 0.005, maxVertical);
+            const maxVertical = 0.055; 
+            y = Math.min(index * 0.007, maxVertical);
             if (index > 4) {
                 const phase = (index - 4) * 0.4;
-                const amplitude = Math.min((index - 4) * 0.002, 0.025);
+                const amplitude = Math.min((index - 4) * 0.003, 0.035);
                 x = Math.sin(phase) * amplitude;
             }
-            // Aiming Down Sights makes spray 60% tighter
             const multiplier = isAiming ? 0.4 : 1.0;
             return new THREE.Vector2(x * multiplier, y * multiplier);
         }
@@ -388,21 +393,22 @@
             ammo--; updateAmmoUI(); shotCount++;
 
             flashSprite.material.opacity = 1; flashLight.intensity = 2;
-            gunRecoilOffset.z = 0.06; gunRecoilRot.x = 0.08;
+            
+            // STRONGER GUN VISUAL RECOIL
+            gunRecoilOffset.z = 0.12; 
+            gunRecoilRot.x = 0.15; 
 
-            // FIXED CAMERA RECOIL: Always kicks camera safely upwards using quaternions
-            const viewKick = isAiming ? 0.0015 : 0.003;
+            // STRONGER CAMERA KICK
+            const viewKick = isAiming ? 0.003 : 0.006;
             const euler = new THREE.Euler(0, 0, 0, 'YXZ');
             euler.setFromQuaternion(camera.quaternion);
             euler.x += viewKick;
             euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x));
             camera.quaternion.setFromEuler(euler);
 
-            // FIXED SPRAY PATTERN: Uses NDC for flawless bullet raycasting
             const sprayNDC = getSprayNDC(shotCount);
             raycaster.setFromCamera(sprayNDC, camera);
 
-            // Visual UI crosshair expansion
             if (!isAiming) {
                 const spreadPixels = (sprayNDC.y + Math.abs(sprayNDC.x)) * 1000 + 14;
                 document.getElementById('ch-top').style.transform = `translateY(-${spreadPixels}px)`;
@@ -436,8 +442,7 @@
             socket.emit('playerShot', { hitPoint: hitPoint });
         }
 
-        // --- 6. INPUTS ---
-        document.addEventListener('contextmenu', (e) => e.preventDefault()); // Stop right click menu
+        document.addEventListener('contextmenu', (e) => e.preventDefault()); 
 
         document.addEventListener('mousedown', (e) => {
             if (!controls.isLocked || !inGame) return;
@@ -445,7 +450,8 @@
                 isShooting = true;
                 if (ammo === 0) reload();
             }
-            if (e.button === 2) isAiming = true; // Right click to ADS
+            // Only allow aiming if not currently reloading
+            if (e.button === 2 && !isReloading) isAiming = true; 
         });
         
         document.addEventListener('mouseup', (e) => {
@@ -473,7 +479,6 @@
             if (keys.hasOwnProperty(key)) keys[key] = false;
         });
 
-        // --- 7. GAME LOOP ---
         const moveSpeed = 50.0;
         const velocity = new THREE.Vector3();
         const direction = new THREE.Vector3();
@@ -494,7 +499,6 @@
                 if (recoilRecoveryTimer > 0.15) shotCount = Math.max(0, shotCount - delta * 25); 
             }
 
-            // ADS transition and Recoil Recovery
             crosshair.style.opacity = isAiming ? '0' : '0.8';
             const targetGunPos = isAiming ? adsPosition : hipPosition;
             gunRecoilOffset.lerp(new THREE.Vector3(0,0,0), 0.15); 
@@ -515,7 +519,7 @@
                 direction.x = Number(keys.d) - Number(keys.a);
                 direction.normalize(); 
 
-                const speed = isAiming ? moveSpeed * 0.5 : moveSpeed; // Walk slower when aiming
+                const speed = isAiming ? moveSpeed * 0.5 : moveSpeed; 
                 if (keys.w || keys.s) velocity.z -= direction.z * speed * delta;
                 if (keys.a || keys.d) velocity.x -= direction.x * speed * delta;
                 
