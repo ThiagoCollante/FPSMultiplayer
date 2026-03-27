@@ -111,6 +111,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { PointerLockControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
+        import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
         import { io } from "https://cdn.socket.io/4.7.2/socket.io.esm.min.js";
 
         // --- SCENE SETUP ---
@@ -128,8 +129,14 @@
         document.body.appendChild(renderer.domElement);
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+        
+        // Directional light needed to illuminate the GLTF models properly
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        dirLight.position.set(20, 50, 20);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
 
-        // --- TEXTURE GENERATORS ---
+        // --- TEXTURE GENERATORS & MAP ---
         const MAP_SIZE = 80;
 
         function createFloorTexture() {
@@ -145,14 +152,6 @@
             return tex;
         }
 
-        function createCrateTexture() {
-            const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256; const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#7c5432'; ctx.fillRect(0, 0, 256, 256);
-            ctx.lineWidth = 12; ctx.strokeStyle = '#4a301a'; ctx.strokeRect(0, 0, 256, 256);
-            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(256, 256); ctx.moveTo(256, 0); ctx.lineTo(0, 256); ctx.stroke();
-            return new THREE.CanvasTexture(canvas);
-        }
-
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(MAP_SIZE, MAP_SIZE), new THREE.MeshStandardMaterial({ map: createFloorTexture(), roughness: 0.9, metalness: 0.1 }));
         floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 
@@ -160,9 +159,6 @@
         scene.add(envGroup);
 
         const wallMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 1.0 });
-        const pillarMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.6, roughness: 0.4 });
-        const crateMat = new THREE.MeshStandardMaterial({ map: createCrateTexture(), roughness: 0.8 });
-        
         let boundingBoxes = [];
 
         function createWall(x, z, width, depth) { 
@@ -174,106 +170,19 @@
             boundingBoxes.push(new THREE.Box3().setFromObject(wall));
         }
 
-        function spawnCrate(x, y, z, size, rot) {
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), crateMat);
-            mesh.scale.set(size, size, size);
-            mesh.position.set(x, y + size/2, z);
-            mesh.rotation.y = rot; 
-            mesh.castShadow = true; mesh.receiveShadow = true;
-            envGroup.add(mesh);
-            mesh.updateMatrixWorld();
-            boundingBoxes.push(new THREE.Box3().setFromObject(mesh));
-        }
-
-        let seed = 12345;
-        function seededRandom() {
-            seed = (seed * 9301 + 49297) % 233280;
-            return seed / 233280;
-        }
-
         function loadMap(mapId) {
             envGroup.clear();
             boundingBoxes = [];
-            seed = 12345; 
-
             createWall(0, -MAP_SIZE/2, MAP_SIZE, 2); 
             createWall(0, MAP_SIZE/2, MAP_SIZE, 2);  
             createWall(-MAP_SIZE/2, 0, 2, MAP_SIZE); 
             createWall(MAP_SIZE/2, 0, 2, MAP_SIZE);  
-
-            mapId = parseInt(mapId);
-
-            if (mapId === 2) {
-                for (let x = -MAP_SIZE/2 + 10; x < MAP_SIZE/2; x += 20) {
-                    for (let z = -MAP_SIZE/2 + 10; z < MAP_SIZE/2; z += 20) {
-                        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 15, 1.5), pillarMat);
-                        mesh.position.set(x, 15/2, z);
-                        mesh.castShadow = true; mesh.receiveShadow = true;
-                        envGroup.add(mesh);
-                        mesh.updateMatrixWorld();
-                        boundingBoxes.push(new THREE.Box3().setFromObject(mesh));
-                    }
-                }
-
-                for (let i = 0; i < 40; i++) {
-                    let x = (seededRandom() - 0.5) * (MAP_SIZE - 10);
-                    let z = (seededRandom() - 0.5) * (MAP_SIZE - 10);
-                    if (Math.abs(x) < 5 && Math.abs(z) < 5) continue; 
-                    let size = 2 + seededRandom() * 2;
-                    let stacks = 1 + Math.floor(seededRandom() * 3);
-                    let rot = (seededRandom() - 0.5) * 0.2;
-                    for(let s = 0; s < stacks; s++) {
-                        spawnCrate(x, s * size, z, size, rot);
-                    }
-                }
-
-                const lightPositions = [[-20, -20], [20, -20], [-20, 20], [20, 20], [0, 0]];
-                lightPositions.forEach(pos => {
-                    const light = new THREE.PointLight(0xffddaa, 1.5, 40);
-                    light.position.set(pos[0], 14, pos[1]);
-                    light.castShadow = true;
-                    light.shadow.bias = -0.001;
-                    envGroup.add(light);
-
-                    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffddaa }));
-                    bulb.position.copy(light.position);
-                    envGroup.add(bulb);
-                });
-
-            } else if (mapId === 3) {
-                createWall(-10, -10, 20, 2);
-                createWall(10, -10, 2, 20);
-                createWall(10, 10, 20, 2);
-                createWall(-10, 10, 2, 20);
-                const centerMesh = new THREE.Mesh(new THREE.BoxGeometry(6, 15, 6), pillarMat);
-                centerMesh.position.set(0, 15/2, 0);
-                envGroup.add(centerMesh);
-                centerMesh.updateMatrixWorld();
-                boundingBoxes.push(new THREE.Box3().setFromObject(centerMesh));
-
-                const light = new THREE.PointLight(0xffffff, 1.5, 60);
-                light.position.set(0, 14, 0); envGroup.add(light);
-            } else {
-                const light = new THREE.PointLight(0xffffff, 1.5, 100);
-                light.position.set(0, 14, 0); envGroup.add(light);
-            }
         }
 
-        // --- MATERIALS & WEAPON MODELS ---
+        // --- MUZZLE FLASH SYSTEM ---
         const flashCanvas = document.createElement('canvas'); flashCanvas.width = 128; flashCanvas.height = 128; const fCtx = flashCanvas.getContext('2d');
         const gradient = fCtx.createRadialGradient(64, 64, 0, 64, 64, 64); gradient.addColorStop(0, 'rgba(255, 255, 255, 1)'); gradient.addColorStop(0.2, 'rgba(255, 200, 50, 0.8)'); gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
         fCtx.fillStyle = gradient; fCtx.fillRect(0, 0, 128, 128); const flashTex = new THREE.CanvasTexture(flashCanvas);
-
-        function getMats() {
-            return {
-                polymerMat: new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8, metalness: 0.2 }),
-                metalMat: new THREE.MeshStandardMaterial({ color: 0x2c2f33, roughness: 0.3, metalness: 0.9 }),
-                darkMetalMat: new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.5, metalness: 0.8 }),
-                glassMat: new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.2, side: THREE.DoubleSide }),
-                dotMat: new THREE.MeshBasicMaterial({ color: 0xff0000 }),
-                woodMat: new THREE.MeshStandardMaterial({ color: 0x3d2314, roughness: 0.9, metalness: 0.1 })
-            };
-        }
 
         let flashSprite, flashLight; 
         function attachFlash(group, zPos, yPos = 0.04) {
@@ -282,88 +191,61 @@
             const fLight = new THREE.PointLight(0xffaa00, 0, 5); fLight.position.copy(fSprite.position); 
             group.add(fSprite); group.add(fLight);
         }
-        
-        function addPart(group, geometry, material, x, y, z, rx=0, ry=0, rz=0) {
-            const mesh = new THREE.Mesh(geometry, material); mesh.position.set(x, y, z); mesh.rotation.set(rx, ry, rz); group.add(mesh);
-        }
 
-        function buildARModel() {
-            const mats = getMats();
-            const grp = new THREE.Group();
-            addPart(grp, new THREE.BoxGeometry(0.055, 0.08, 0.3), mats.metalMat, 0, 0.04, 0);
-            addPart(grp, new THREE.BoxGeometry(0.045, 0.06, 0.2), mats.polymerMat, 0, -0.02, 0.02);
-            addPart(grp, new THREE.CylinderGeometry(0.01, 0.012, 0.45, 16), mats.darkMetalMat, 0, 0.04, -0.25, Math.PI/2, 0, 0);
-            addPart(grp, new THREE.CylinderGeometry(0.035, 0.035, 0.3, 8), mats.polymerMat, 0, 0.04, -0.2, Math.PI/2, 0, 0);
-            addPart(grp, new THREE.CylinderGeometry(0.015, 0.015, 0.2, 12), mats.metalMat, 0, 0.04, 0.25, Math.PI/2, 0, 0);
-            addPart(grp, new THREE.BoxGeometry(0.04, 0.12, 0.15), mats.polymerMat, 0, 0, 0.3);
-            addPart(grp, new THREE.BoxGeometry(0.035, 0.12, 0.055), mats.polymerMat, 0, -0.09, 0.1, -Math.PI/12, 0, 0);
-            addPart(grp, new THREE.BoxGeometry(0.03, 0.1, 0.07), mats.polymerMat, 0, -0.08, -0.03, Math.PI/24, 0, 0);
-            addPart(grp, new THREE.BoxGeometry(0.03, 0.1, 0.07), mats.polymerMat, 0, -0.16, -0.045, Math.PI/8, 0, 0);
-            addPart(grp, new THREE.BoxGeometry(0.03, 0.02, 0.06), mats.metalMat, 0, 0.09, 0);
-            addPart(grp, new THREE.BoxGeometry(0.035, 0.005, 0.04), mats.metalMat, 0, 0.13, 0);
-            addPart(grp, new THREE.PlaneGeometry(0.025, 0.03), mats.glassMat, 0, 0.11, 0.01);
-            addPart(grp, new THREE.CircleGeometry(0.0015, 8), mats.dotMat, 0, 0.11, 0.011);
-            attachFlash(grp, -0.55); return grp;
-        }
-
-        function buildSniperModel() {
-            const mats = getMats();
-            const grp = new THREE.Group();
-            addPart(grp, new THREE.BoxGeometry(0.05, 0.08, 0.4), mats.darkMetalMat, 0, 0.04, 0);
-            addPart(grp, new THREE.CylinderGeometry(0.012, 0.015, 0.8, 16), mats.metalMat, 0, 0.04, -0.4, Math.PI/2, 0, 0);
-            addPart(grp, new THREE.BoxGeometry(0.03, 0.03, 0.08), mats.darkMetalMat, 0, 0.04, -0.8);
-            addPart(grp, new THREE.CylinderGeometry(0.025, 0.025, 0.25, 16), mats.darkMetalMat, 0, 0.12, 0, Math.PI/2, 0, 0);
-            addPart(grp, new THREE.PlaneGeometry(0.04, 0.04), mats.glassMat, 0, 0.12, -0.126);
-            addPart(grp, new THREE.CircleGeometry(0.002, 8), mats.dotMat, 0, 0.12, -0.125);
-            addPart(grp, new THREE.BoxGeometry(0.04, 0.15, 0.25), mats.polymerMat, 0, 0.0, 0.3);
-            addPart(grp, new THREE.BoxGeometry(0.035, 0.12, 0.055), mats.polymerMat, 0, -0.07, 0.1, -Math.PI/12, 0, 0);
-            addPart(grp, new THREE.BoxGeometry(0.03, 0.08, 0.08), mats.darkMetalMat, 0, -0.04, -0.05);
-            attachFlash(grp, -0.85); return grp;
-        }
-
-        function buildShotgunModel() {
-            const mats = getMats();
-            const grp = new THREE.Group();
-            addPart(grp, new THREE.BoxGeometry(0.06, 0.09, 0.3), mats.darkMetalMat, 0, 0, 0);
-            addPart(grp, new THREE.CylinderGeometry(0.015, 0.015, 0.5, 16), mats.darkMetalMat, 0, 0.02, -0.3, Math.PI/2, 0, 0);
-            addPart(grp, new THREE.CylinderGeometry(0.012, 0.012, 0.45, 16), mats.metalMat, 0, -0.02, -0.27, Math.PI/2, 0, 0);
-            addPart(grp, new THREE.CylinderGeometry(0.025, 0.025, 0.15, 12), mats.polymerMat, 0, -0.02, -0.2, Math.PI/2, 0, 0);
-            addPart(grp, new THREE.BoxGeometry(0.045, 0.12, 0.3), mats.woodMat, 0, -0.04, 0.25, Math.PI/20, 0, 0);
-            addPart(grp, new THREE.BoxGeometry(0.005, 0.02, 0.005), mats.metalMat, 0, 0.045, -0.53);
-            attachFlash(grp, -0.6, 0.02); return grp;
-        }
-
-        function buildKnifeModel() {
-            const mats = getMats();
-            const grp = new THREE.Group();
-            addPart(grp, new THREE.BoxGeometry(0.02, 0.12, 0.03), mats.polymerMat, 0, 0, 0);
-            addPart(grp, new THREE.BoxGeometry(0.022, 0.02, 0.032), mats.darkMetalMat, 0, 0.03, 0);
-            addPart(grp, new THREE.BoxGeometry(0.022, 0.02, 0.032), mats.darkMetalMat, 0, -0.03, 0);
-            addPart(grp, new THREE.BoxGeometry(0.025, 0.015, 0.035), mats.metalMat, 0, -0.065, 0);
-            addPart(grp, new THREE.BoxGeometry(0.03, 0.01, 0.045), mats.metalMat, 0, 0.065, 0);
-            addPart(grp, new THREE.BoxGeometry(0.008, 0.14, 0.015), mats.darkMetalMat, 0, 0.14, -0.005);
-            addPart(grp, new THREE.BoxGeometry(0.002, 0.14, 0.015), mats.metalMat, 0, 0.14, 0.01);
-            addPart(grp, new THREE.ConeGeometry(0.015, 0.06, 4), mats.metalMat, 0, 0.23, 0.0025, 0, Math.PI/4, 0);
-            
-            grp.rotation.set(-Math.PI / 2.5, Math.PI / 10, Math.PI / 12);
-            grp.position.set(0, -0.05, -0.1);
-            const container = new THREE.Group(); container.add(grp);
-            return container;
-        }
+        // --- GLTF WEAPON LOADER ---
+        const gltfLoader = new GLTFLoader();
 
         const WEAPONS = [
-            { id: 1, name: "Assault Rifle", isMelee: false, maxAmmo: 30, currentAmmo: 30, fireRate: 0.09, damage: 25, pellets: 1, auto: true, reloadTime: 1500, adsFov: 50, hipPos: new THREE.Vector3(0.2, -0.2, -0.35), adsPos: new THREE.Vector3(0, -0.11, -0.25), buildFunc: buildARModel },
-            { id: 2, name: "Sniper Rifle", isMelee: false, maxAmmo: 5, currentAmmo: 5, fireRate: 1.5, damage: 100, pellets: 1, auto: false, reloadTime: 2500, adsFov: 15, hipPos: new THREE.Vector3(0.25, -0.2, -0.3), adsPos: new THREE.Vector3(0, -0.12, -0.15), buildFunc: buildSniperModel },
-            { id: 3, name: "Shotgun", isMelee: false, maxAmmo: 8, currentAmmo: 8, fireRate: 0.8, damage: 15, pellets: 8, auto: false, reloadTime: 2000, adsFov: 60, hipPos: new THREE.Vector3(0.25, -0.25, -0.35), adsPos: new THREE.Vector3(0, -0.055, -0.2), buildFunc: buildShotgunModel },
-            { id: 4, name: "Tactical Knife", isMelee: true, range: 2.5, maxAmmo: Infinity, currentAmmo: Infinity, fireRate: 0.5, damage: 50, pellets: 1, auto: false, reloadTime: 0, adsFov: 75, hipPos: new THREE.Vector3(0.15, -0.15, -0.25), adsPos: new THREE.Vector3(0.15, -0.15, -0.25), buildFunc: buildKnifeModel }
+            { id: 1, name: "Assault Rifle", filename: 'ar.glb', isMelee: false, maxAmmo: 30, currentAmmo: 30, fireRate: 0.09, damage: 25, pellets: 1, auto: true, reloadTime: 1500, adsFov: 50, hipPos: new THREE.Vector3(0.2, -0.2, -0.35), adsPos: new THREE.Vector3(0, -0.11, -0.25), flashZ: -0.55, flashY: 0.04 },
+            { id: 2, name: "Sniper Rifle", filename: 'sniper.glb', isMelee: false, maxAmmo: 5, currentAmmo: 5, fireRate: 1.5, damage: 100, pellets: 1, auto: false, reloadTime: 2500, adsFov: 15, hipPos: new THREE.Vector3(0.25, -0.2, -0.3), adsPos: new THREE.Vector3(0, -0.12, -0.15), flashZ: -0.85, flashY: 0.04 },
+            { id: 3, name: "Shotgun", filename: 'shotgun.glb', isMelee: false, maxAmmo: 8, currentAmmo: 8, fireRate: 0.8, damage: 15, pellets: 8, auto: false, reloadTime: 2000, adsFov: 60, hipPos: new THREE.Vector3(0.25, -0.25, -0.35), adsPos: new THREE.Vector3(0, -0.055, -0.2), flashZ: -0.6, flashY: 0.02 },
+            { id: 4, name: "Tactical Knife", filename: 'knife.glb', isMelee: true, range: 2.5, maxAmmo: Infinity, currentAmmo: Infinity, fireRate: 0.5, damage: 50, pellets: 1, auto: false, reloadTime: 0, adsFov: 75, hipPos: new THREE.Vector3(0.15, -0.15, -0.25), adsPos: new THREE.Vector3(0.15, -0.15, -0.25) }
         ];
-        
+
         let currentWeaponIndex = 0;
         let currentWeapon = WEAPONS[currentWeaponIndex];
         let gunGroup = null;
         let currentGunBasePos = new THREE.Vector3();
 
-        WEAPONS.forEach(w => w.model = w.buildFunc());
+        // Pre-load all GLTF models
+        WEAPONS.forEach(w => {
+            w.model = new THREE.Group(); 
+            w.baseScene = null; 
+
+            gltfLoader.load(`assets/${w.filename}`, (gltf) => {
+                const mesh = gltf.scene;
+                
+                // Allow models to cast/receive shadows
+                mesh.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+
+                w.baseScene = mesh; 
+                
+                // Add instance to the local first-person group
+                const fpMesh = mesh.clone();
+                w.model.add(fpMesh);
+
+                if (!w.isMelee) attachFlash(w.model, w.flashZ, w.flashY);
+                
+                // Ensure flash elements are linked properly if this weapon is active
+                if (currentWeapon === w && gunGroup === w.model && !w.isMelee) {
+                    flashSprite = w.model.children[w.model.children.length - 2];
+                    flashLight = w.model.children[w.model.children.length - 1];
+                }
+
+            }, undefined, (error) => {
+                console.error(`Error loading model ${w.filename}:`, error);
+                // Fallback cube if model fails to load
+                const fallback = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.4), new THREE.MeshStandardMaterial({color: 0x555555}));
+                w.baseScene = fallback;
+                w.model.add(fallback.clone());
+                if (!w.isMelee) attachFlash(w.model, w.flashZ, w.flashY);
+            });
+        });
 
         function equipWeapon(index) {
             if (isReloading || !inGame || index < 0 || index >= WEAPONS.length) return;
@@ -376,7 +258,8 @@
             gunGroup = currentWeapon.model;
             currentGunBasePos.copy(currentWeapon.hipPos);
             
-            if (!currentWeapon.isMelee) {
+            if (!currentWeapon.isMelee && gunGroup.children.length >= 2) {
+                // Flash assets are appended last
                 flashSprite = gunGroup.children[gunGroup.children.length - 2];
                 flashLight = gunGroup.children[gunGroup.children.length - 1];
             } else {
@@ -385,12 +268,11 @@
 
             camera.add(gunGroup);
             isShooting = false; isAiming = false; isSwinging = false; shotCount = 0;
-            if (controls) controls.pointerSpeed = 1.0; // Reset sensitivity
+            if (controls) controls.pointerSpeed = 1.0; 
             camera.fov = 75; camera.updateProjectionMatrix();
             document.getElementById('weapon-info').innerText = currentWeapon.name;
             updateAmmoUI();
 
-            // Notify server of weapon change
             socket.emit('changeWeapon', index);
         }
 
@@ -408,10 +290,7 @@
         const cutGeo = new THREE.PlaneGeometry(0.015, 0.2); 
         const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
         
-        function clearDecals() {
-            decals.forEach(d => scene.remove(d));
-            decals = [];
-        }
+        function clearDecals() { decals.forEach(d => scene.remove(d)); decals = []; }
 
         function createDecal(intersection, isCut) {
             const geo = isCut ? cutGeo : holeGeo;
@@ -437,7 +316,6 @@
         function buildPlayerModel(id, baseColor, wIndex = 0) {
             const pGroup = new THREE.Group();
             
-            // Setup User Data to hold animation state
             pGroup.userData = { 
                 id: id, 
                 isReloading: false, 
@@ -446,35 +324,28 @@
                 recoil: new THREE.Vector3() 
             };
             
-            const pMat = new THREE.MeshStandardMaterial({ 
-                color: baseColor, 
-                roughness: 0.6, 
-                metalness: 0.1 
-            });
+            const pMat = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.6, metalness: 0.1 });
             
             const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.4), pMat);
-            body.position.y = 0.6;
-            body.castShadow = true;
-            body.userData.isHead = false; // Added tag for body hit
+            body.position.y = 0.6; body.castShadow = true; body.userData.isHead = false; 
             pGroup.add(body);
             
             const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), pMat);
-            head.position.y = 1.45;
-            head.castShadow = true;
-            head.userData.isHead = true; // Added tag for head hit
+            head.position.y = 1.45; head.castShadow = true; head.userData.isHead = true; 
             pGroup.add(head);
 
-            // Create a pivot for the weapon to handle vertical look pitch
             const weaponPivot = new THREE.Group();
-            weaponPivot.position.set(0, 1.2, 0); // Shoulder/chest level
+            weaponPivot.position.set(0, 1.2, 0); 
             pGroup.add(weaponPivot);
             pGroup.userData.weaponPivot = weaponPivot;
 
-            // Generate full 3rd person weapon meshes and attach to pivot
             const tpWeapons = [];
             WEAPONS.forEach((w, idx) => {
-                const wModel = w.buildFunc();
-                // Position weapon as if held to the right side
+                const wModel = new THREE.Group();
+                // If baseScene loaded successfully, clone it for this specific player
+                if (w.baseScene) {
+                    wModel.add(w.baseScene.clone());
+                }
                 wModel.position.set(0.3, -0.2, -0.4); 
                 wModel.visible = (idx === wIndex); 
                 weaponPivot.add(wModel);
@@ -516,7 +387,7 @@
             isPaused = true;
             document.getElementById('ui-layer').style.display = 'none';
             isShooting = false; isAiming = false; isSwinging = false; shotCount = 0;
-            controls.pointerSpeed = 1.0; // Reset sens just in case
+            controls.pointerSpeed = 1.0;
             for (let k in keys) keys[k] = false;
             if (inGame) {
                 document.getElementById('pause-menu').style.display = 'flex';
@@ -543,23 +414,20 @@
 
         function enterGame(roomName, mapId) {
             const finalRoomName = roomName.trim() || "Lobby";
-            roomInput.blur(); 
-            mapInput.blur();
-
+            roomInput.blur(); mapInput.blur();
             socket.emit('joinRoom', { roomName: finalRoomName, mapId: mapId });
             document.getElementById('current-room-name').innerText = finalRoomName;
             inGame = true; updateMyHealth(100); 
             WEAPONS.forEach(w => w.currentAmmo = w.maxAmmo);
-            
             equipWeapon(0);
             controls.lock(); 
         }
 
         document.getElementById('create-room-btn').addEventListener('click', () => { enterGame(roomInput.value, mapInput.value); });
         roomInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') enterGame(roomInput.value, mapInput.value); });
-        
         document.getElementById('resume-btn').addEventListener('click', () => { controls.lock(); });
         document.getElementById('pause-menu').addEventListener('click', (e) => { if (e.target.id === 'pause-menu' || e.target.className === 'menu-box') controls.lock(); });
+        
         document.getElementById('leave-btn').addEventListener('click', () => {
             socket.emit('leaveRoom'); inGame = false;
             for (let id in players) { scene.remove(players[id]); delete players[id]; }
@@ -582,9 +450,7 @@
         });
 
         socket.on('roomState', (data) => {
-            clearDecals();
-            loadMap(data.mapId); 
-            
+            clearDecals(); loadMap(data.mapId); 
             for (let id in players) { scene.remove(players[id]); delete players[id]; } 
             for (let id in data.players) {
                 if (id === socket.id) { updateMyHealth(data.players[id].health); continue; }
@@ -614,8 +480,7 @@
                 const pData = players[data.id].userData;
                 pData.currentWeaponIndex = data.weaponIndex;
                 pData.tpWeapons.forEach((w, idx) => w.visible = (idx === data.weaponIndex));
-                pData.isReloading = false;
-                pData.isSwinging = false;
+                pData.isReloading = false; pData.isSwinging = false;
             }
         });
 
@@ -623,11 +488,9 @@
             if (players[data.id]) {
                 const pData = players[data.id].userData;
                 if (data.action === 'reload') {
-                    pData.isReloading = true;
-                    pData.animStartTime = performance.now();
+                    pData.isReloading = true; pData.animStartTime = performance.now();
                 } else if (data.action === 'swing') {
-                    pData.isSwinging = true;
-                    pData.animStartTime = performance.now();
+                    pData.isSwinging = true; pData.animStartTime = performance.now();
                 }
             }
         });
@@ -637,9 +500,7 @@
         
         socket.on('youDied', () => {
             deathScreen.style.opacity = '1'; setTimeout(() => { deathScreen.style.opacity = '0'; }, 1500);
-            updateMyHealth(100); 
-            WEAPONS.forEach(w => w.currentAmmo = w.maxAmmo);
-            updateAmmoUI(); 
+            updateMyHealth(100); WEAPONS.forEach(w => w.currentAmmo = w.maxAmmo); updateAmmoUI(); 
             velocity.set(0,0,0); camera.position.set(0, 1.7, 0); shotCount = 0; isSwinging = false;
         });
         
@@ -650,10 +511,7 @@
                 const pModel = players[data.fromId];
                 const pData = pModel.userData;
                 if (pData.currentWeaponIndex !== undefined && !WEAPONS[pData.currentWeaponIndex].isMelee) {
-                    
-                    pData.recoil.z = 0.15;
-                    pData.recoil.x = 0.15;
-
+                    pData.recoil.z = 0.15; pData.recoil.x = 0.15;
                     const fromPos = new THREE.Vector3();
                     pData.tpWeapons[pData.currentWeaponIndex].getWorldPosition(fromPos); 
                     createTracer(fromPos, data.toPosition);
@@ -669,7 +527,7 @@
         function reload() {
             if (currentWeapon.isMelee || isReloading || currentWeapon.currentAmmo === currentWeapon.maxAmmo || !inGame) return;
             isReloading = true; isAiming = false; shotCount = 0; reloadStartTime = performance.now();
-            controls.pointerSpeed = 1.0; // Reset sens just in case
+            controls.pointerSpeed = 1.0; 
             socket.emit('playerAction', { action: 'reload' });
         }
 
@@ -698,7 +556,7 @@
 
             if (!currentWeapon.isMelee) {
                 currentWeapon.currentAmmo--; updateAmmoUI(); shotCount++;
-                flashSprite.material.opacity = 1; flashLight.intensity = 2;
+                if (flashSprite && flashLight) { flashSprite.material.opacity = 1; flashLight.intensity = 2; }
                 gunRecoilOffset.z = 0.12; gunRecoilRot.x = 0.15; 
                 
                 const viewKick = isAiming ? 0.003 : 0.01;
@@ -707,8 +565,7 @@
                 euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x));
                 camera.quaternion.setFromEuler(euler);
             } else {
-                isSwinging = true;
-                swingStartTime = performance.now();
+                isSwinging = true; swingStartTime = performance.now();
                 camera.rotation.x += 0.002; 
                 socket.emit('playerAction', { action: 'swing' });
             }
@@ -738,7 +595,7 @@
 
                     hitPoint = intersects[0].point;
                     let hitObject = intersects[0].object;
-                    let isHeadshot = hitObject.userData.isHead === true; // Check for head tag
+                    let isHeadshot = hitObject.userData.isHead === true; 
 
                     let rootObject = hitObject;
 
@@ -751,12 +608,12 @@
                         }
                     }
                     
-                    if (!currentWeapon.isMelee) {
+                    if (!currentWeapon.isMelee && flashSprite) {
                         const barrelWorldPos = new THREE.Vector3(); flashSprite.getWorldPosition(barrelWorldPos);
                         createTracer(barrelWorldPos, hitPoint);
                     }
                 } else {
-                    if (!currentWeapon.isMelee) {
+                    if (!currentWeapon.isMelee && flashSprite) {
                         hitPoint = raycaster.ray.origin.clone().addScaledVector(raycaster.ray.direction, 100);
                         const barrelWorldPos = new THREE.Vector3(); flashSprite.getWorldPosition(barrelWorldPos);
                         createTracer(barrelWorldPos, hitPoint);
@@ -782,17 +639,13 @@
                 if (!currentWeapon.isMelee && currentWeapon.currentAmmo === 0) reload();
             }
             if (e.button === 2 && !isReloading && !currentWeapon.isMelee) {
-                isAiming = true; 
-                controls.pointerSpeed = 0.3; // Lower sensitivity when aiming
+                isAiming = true; controls.pointerSpeed = 0.3; 
             }
         });
         
         document.addEventListener('mouseup', (e) => {
             if (e.button === 0) { isShooting = false; shotCount = 0; }
-            if (e.button === 2) {
-                isAiming = false;
-                controls.pointerSpeed = 1.0; // Restore sensitivity
-            }
+            if (e.button === 2) { isAiming = false; controls.pointerSpeed = 1.0; }
         });
 
         window.addEventListener('wheel', (e) => {
@@ -813,8 +666,7 @@
             if (e.code === 'Space' && canJump) { velocity.y = 12; canJump = false; }
         });
         document.addEventListener('keyup', (e) => {
-            const key = e.key.toLowerCase();
-            if (keys.hasOwnProperty(key)) keys[key] = false;
+            const key = e.key.toLowerCase(); if (keys.hasOwnProperty(key)) keys[key] = false;
         });
 
         // --- COLLISION ENGINE ---
@@ -863,16 +715,10 @@
             let colY = getCollisionBox(pos, radius, pMinY, pMaxY);
 
             if (colY) {
-                if (movement.y < 0) { 
-                    pos.y = colY.max.y + 1.7; velocity.y = 0; canJump = true;
-                } else if (movement.y > 0) { 
-                    pos.y = colY.min.y - 0.001; velocity.y = 0;
-                }
-            } else if (pos.y < 1.7) { 
-                pos.y = 1.7; velocity.y = 0; canJump = true;
-            } else {
-                canJump = false; 
-            }
+                if (movement.y < 0) { pos.y = colY.max.y + 1.7; velocity.y = 0; canJump = true;
+                } else if (movement.y > 0) { pos.y = colY.min.y - 0.001; velocity.y = 0; }
+            } else if (pos.y < 1.7) { pos.y = 1.7; velocity.y = 0; canJump = true;
+            } else { canJump = false; }
         }
 
         // --- RENDER LOOP ---
@@ -934,7 +780,6 @@
 
                 inputVelocity.normalize();
                 
-                // Speed slows down to 40% when aiming down sights
                 const speed = isAiming ? moveSpeed * 0.4 : moveSpeed; 
                 inputVelocity.multiplyScalar(speed * delta);
 
@@ -958,37 +803,39 @@
             }
 
             // Local Gun Animations
-            if (isReloading) {
-                let progress = (time - reloadStartTime) / currentWeapon.reloadTime;
-                if (progress >= 1) { progress = 1; isReloading = false; currentWeapon.currentAmmo = currentWeapon.maxAmmo; updateAmmoUI(); }
-                gunGroup.position.copy(currentWeapon.hipPos);
-                
-                gunGroup.rotation.order = 'ZYX'; 
-                const totalFlips = Math.ceil(currentWeapon.reloadTime / 400); 
-                const sideTilt = Math.sin(progress * Math.PI) * (-55 * (Math.PI / 180)); 
-                const inwardTilt = Math.sin(progress * Math.PI) * -0.4; 
-                
-                gunGroup.rotation.set(-progress * Math.PI * 2 * totalFlips, inwardTilt, sideTilt); 
-            } else if (isSwinging) {
-                gunGroup.rotation.order = 'XYZ'; 
-                let progress = (time - swingStartTime) / (currentWeapon.fireRate * 1000);
-                if (progress >= 1) { progress = 1; isSwinging = false; }
-                const swingAng = Math.sin(progress * Math.PI); 
-                
-                gunGroup.position.copy(currentGunBasePos);
-                gunGroup.position.add(new THREE.Vector3(bobX - swingAng * 0.15, bobY, gunRecoilOffset.z));
-                gunGroup.rotation.set(-swingAng * 0.5, swingAng * 1.5, -swingAng * 0.8);
-            } else {
-                gunGroup.rotation.order = 'XYZ'; 
-                gunGroup.position.copy(currentGunBasePos);
-                gunGroup.position.add(new THREE.Vector3(bobX + gunRecoilOffset.x, bobY + gunRecoilOffset.y, gunRecoilOffset.z));
-                gunGroup.rotation.set(gunRecoilRot.x, gunRecoilRot.y, gunRecoilRot.z);
+            if (gunGroup) {
+                if (isReloading) {
+                    let progress = (time - reloadStartTime) / currentWeapon.reloadTime;
+                    if (progress >= 1) { progress = 1; isReloading = false; currentWeapon.currentAmmo = currentWeapon.maxAmmo; updateAmmoUI(); }
+                    gunGroup.position.copy(currentWeapon.hipPos);
+                    
+                    gunGroup.rotation.order = 'ZYX'; 
+                    const totalFlips = Math.ceil(currentWeapon.reloadTime / 400); 
+                    const sideTilt = Math.sin(progress * Math.PI) * (-55 * (Math.PI / 180)); 
+                    const inwardTilt = Math.sin(progress * Math.PI) * -0.4; 
+                    
+                    gunGroup.rotation.set(-progress * Math.PI * 2 * totalFlips, inwardTilt, sideTilt); 
+                } else if (isSwinging) {
+                    gunGroup.rotation.order = 'XYZ'; 
+                    let progress = (time - swingStartTime) / (currentWeapon.fireRate * 1000);
+                    if (progress >= 1) { progress = 1; isSwinging = false; }
+                    const swingAng = Math.sin(progress * Math.PI); 
+                    
+                    gunGroup.position.copy(currentGunBasePos);
+                    gunGroup.position.add(new THREE.Vector3(bobX - swingAng * 0.15, bobY, gunRecoilOffset.z));
+                    gunGroup.rotation.set(-swingAng * 0.5, swingAng * 1.5, -swingAng * 0.8);
+                } else {
+                    gunGroup.rotation.order = 'XYZ'; 
+                    gunGroup.position.copy(currentGunBasePos);
+                    gunGroup.position.add(new THREE.Vector3(bobX + gunRecoilOffset.x, bobY + gunRecoilOffset.y, gunRecoilOffset.z));
+                    gunGroup.rotation.set(gunRecoilRot.x, gunRecoilRot.y, gunRecoilRot.z);
+                }
             }
 
             if (inGame && controls.isLocked) {
                 const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir); 
                 const pureYaw = Math.atan2(-camDir.x, -camDir.z); 
-                const purePitch = Math.asin(camDir.y); // Send vertical look angle
+                const purePitch = Math.asin(camDir.y); 
                 socket.emit('playerMovement', { position: { x: camera.position.x, y: camera.position.y - 1.7, z: camera.position.z }, rotation: { y: pureYaw, x: purePitch } });
             }
 
@@ -997,11 +844,10 @@
                 const pModel = players[id];
                 const pData = pModel.userData;
                 const wpIndex = pData.currentWeaponIndex;
-                if (wpIndex !== undefined) {
+                if (wpIndex !== undefined && pData.tpWeapons && pData.tpWeapons[wpIndex]) {
                     const wProps = WEAPONS[wpIndex];
                     const activeGun = pData.tpWeapons[wpIndex];
 
-                    // Recoil Recovery
                     pData.recoil.lerp(new THREE.Vector3(0,0,0), 0.2);
 
                     if (pData.isReloading) {
@@ -1018,7 +864,6 @@
                         activeGun.rotation.set(-swingAng * 0.5, swingAng * 1.5, -swingAng * 0.8);
                         activeGun.position.set(0.3, -0.2, -0.4).add(new THREE.Vector3(0, 0, pData.recoil.z));
                     } else {
-                        // Apply recoil to resting position
                         activeGun.rotation.set(pData.recoil.x, 0, 0);
                         activeGun.position.set(0.3, -0.2, -0.4).add(new THREE.Vector3(0, pData.recoil.y, pData.recoil.z));
                     }
