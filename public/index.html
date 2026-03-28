@@ -27,6 +27,15 @@
         #weapon-info { position: absolute; bottom: 80px; right: 40px; font-size: 1.5rem; color: #aaa; font-weight: bold; text-shadow: 1px 1px 0px rgba(0,0,0,0.5); text-transform: uppercase;}
         #ammo-counter { position: absolute; bottom: 30px; right: 40px; font-size: 2.5rem; color: white; font-weight: bold; text-shadow: 2px 2px 0px rgba(0,0,0,0.5); pointer-events: none; transition: opacity 0.2s; }
 
+        /* Dev Config UI */
+        #dev-config { position: absolute; top: 20px; right: 20px; background: rgba(15, 20, 25, 0.95); padding: 20px; border-radius: 8px; border: 1px solid #444; color: white; display: none; z-index: 50; width: 300px; pointer-events: auto; }
+        #dev-config h3 { margin-top: 0; color: #00ffcc; text-transform: uppercase; font-size: 1.2rem; }
+        .slider-group { margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+        .slider-group label { font-size: 0.9rem; font-family: monospace; }
+        .slider-group input { width: 150px; }
+        #config-log-btn { background: #ff4655; color: white; border: none; padding: 10px; width: 100%; cursor: pointer; font-weight: bold; border-radius: 4px; margin-top: 15px; }
+        #config-log-btn:hover { background: #ff5866; }
+
         .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; z-index: 15; pointer-events: auto; }
         .menu-box { background: rgba(15, 20, 25, 0.95); padding: 30px; border-radius: 8px; border: 1px solid #333; width: 550px; text-align: center; box-shadow: 0 0 20px rgba(0, 0, 0, 0.5); }
         .btn { padding: 12px 20px; background: #ff4655; color: #fff; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; transition: 0.2s; width: 100%; margin-top: 10px; font-size: 1.1rem; text-transform: uppercase; }
@@ -69,6 +78,17 @@
         </div>
     </div>
 
+    <div id="dev-config">
+        <h3>Weapon Config</h3>
+        <p style="font-size: 0.8rem; color: #aaa; margin-bottom:15px;">Hold Right-Click to test ADS while adjusting sliders. Red sphere shows muzzle.</p>
+        <div class="slider-group"><label>ADS X</label><input type="range" id="c-ads-x" min="-1" max="1" step="0.005" value="0"></div>
+        <div class="slider-group"><label>ADS Y</label><input type="range" id="c-ads-y" min="-1" max="1" step="0.005" value="-0.11"></div>
+        <div class="slider-group"><label>ADS Z</label><input type="range" id="c-ads-z" min="-1" max="1" step="0.005" value="-0.25"></div>
+        <div class="slider-group"><label>Muz Y</label><input type="range" id="c-muz-y" min="-1" max="1" step="0.005" value="0.04"></div>
+        <div class="slider-group"><label>Muz Z</label><input type="range" id="c-muz-z" min="-2" max="1" step="0.005" value="-0.55"></div>
+        <button id="config-log-btn">Log Data to Console</button>
+    </div>
+
     <div id="death-screen">Wasted</div>
 
     <div id="main-menu" class="overlay">
@@ -96,7 +116,7 @@
             <div class="data-row">Room: <span id="pause-room-display">...</span></div>
             <div class="data-row">Players: <span id="pause-players-display">1</span></div>
             <p style="color:#aaa; font-size:0.9rem; margin-bottom:20px;">
-                <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move • <kbd>Scroll</kbd> or <kbd>1</kbd>-<kbd>4</kbd> Weapons<br><br>
+                <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move • <kbd>1</kbd>-<kbd>4</kbd> Weapons • <kbd>C</kbd> Config<br><br>
                 <kbd>L/R Click</kbd> Fire/Aim • <kbd>R</kbd> Reload
             </p>
             <button class="btn" id="resume-btn" style="background:#00ffcc; color:#000;">Resume Game</button>
@@ -130,13 +150,12 @@
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.9));
         
-        // Directional light needed to illuminate the GLTF models properly
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
         dirLight.position.set(20, 50, 20);
         dirLight.castShadow = true;
         scene.add(dirLight);
 
-        // --- TEXTURE GENERATORS & MAP ---
+        // --- MAP GENERATION ---
         const MAP_SIZE = 80;
 
         function createFloorTexture() {
@@ -179,17 +198,28 @@
             createWall(MAP_SIZE/2, 0, 2, MAP_SIZE);  
         }
 
-        // --- MUZZLE FLASH SYSTEM ---
+        // --- MUZZLE FLASH & CONFIG REFERENCE MARKER ---
         const flashCanvas = document.createElement('canvas'); flashCanvas.width = 128; flashCanvas.height = 128; const fCtx = flashCanvas.getContext('2d');
         const gradient = fCtx.createRadialGradient(64, 64, 0, 64, 64, 64); gradient.addColorStop(0, 'rgba(255, 255, 255, 1)'); gradient.addColorStop(0.2, 'rgba(255, 200, 50, 0.8)'); gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
         fCtx.fillStyle = gradient; fCtx.fillRect(0, 0, 128, 128); const flashTex = new THREE.CanvasTexture(flashCanvas);
 
-        let flashSprite, flashLight; 
+        let flashSprite, flashLight, refMarker; 
+        
+        // Red sphere to show exactly where the muzzle is during config
+        const markerGeo = new THREE.SphereGeometry(0.015, 8, 8);
+        const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
+
         function attachFlash(group, zPos, yPos = 0.04) {
             const fSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, transparent: true, opacity: 0 }));
             fSprite.scale.set(0.4, 0.4, 0.4); fSprite.position.set(0, yPos, zPos); 
             const fLight = new THREE.PointLight(0xffaa00, 0, 5); fLight.position.copy(fSprite.position); 
-            group.add(fSprite); group.add(fLight);
+            
+            // Reference marker for configuration
+            const m = new THREE.Mesh(markerGeo, markerMat);
+            m.position.copy(fSprite.position);
+            m.visible = false; // Hidden by default, toggled in Dev Mode
+
+            group.add(fSprite); group.add(fLight); group.add(m);
         }
 
         // --- GLTF WEAPON LOADER ---
@@ -207,39 +237,30 @@
         let gunGroup = null;
         let currentGunBasePos = new THREE.Vector3();
 
-        // Pre-load all GLTF models
         WEAPONS.forEach(w => {
             w.model = new THREE.Group(); 
             w.baseScene = null; 
 
             gltfLoader.load(`assets/${w.filename}`, (gltf) => {
                 const mesh = gltf.scene;
-                
-                // Allow models to cast/receive shadows
                 mesh.traverse((child) => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                    }
+                    if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
                 });
 
                 w.baseScene = mesh; 
-                
-                // Add instance to the local first-person group
                 const fpMesh = mesh.clone();
                 w.model.add(fpMesh);
 
                 if (!w.isMelee) attachFlash(w.model, w.flashZ, w.flashY);
                 
-                // Ensure flash elements are linked properly if this weapon is active
                 if (currentWeapon === w && gunGroup === w.model && !w.isMelee) {
-                    flashSprite = w.model.children[w.model.children.length - 2];
-                    flashLight = w.model.children[w.model.children.length - 1];
+                    flashSprite = w.model.children[w.model.children.length - 3];
+                    flashLight = w.model.children[w.model.children.length - 2];
+                    refMarker = w.model.children[w.model.children.length - 1];
                 }
 
             }, undefined, (error) => {
-                console.error(`Error loading model ${w.filename}:`, error);
-                // Fallback cube if model fails to load
+                console.error(`Error loading ${w.filename}, spawning fallback cube:`, error);
                 const fallback = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.4), new THREE.MeshStandardMaterial({color: 0x555555}));
                 w.baseScene = fallback;
                 w.model.add(fallback.clone());
@@ -258,12 +279,24 @@
             gunGroup = currentWeapon.model;
             currentGunBasePos.copy(currentWeapon.hipPos);
             
-            if (!currentWeapon.isMelee && gunGroup.children.length >= 2) {
-                // Flash assets are appended last
-                flashSprite = gunGroup.children[gunGroup.children.length - 2];
-                flashLight = gunGroup.children[gunGroup.children.length - 1];
+            if (!currentWeapon.isMelee && gunGroup.children.length >= 3) {
+                flashSprite = gunGroup.children[gunGroup.children.length - 3];
+                flashLight = gunGroup.children[gunGroup.children.length - 2];
+                refMarker = gunGroup.children[gunGroup.children.length - 1];
+                
+                // Keep marker visible if config mode is on
+                if (isConfigMode && refMarker) refMarker.visible = true;
             } else {
-                flashSprite = null; flashLight = null;
+                flashSprite = null; flashLight = null; refMarker = null;
+            }
+
+            // Sync dev sliders to current weapon
+            document.getElementById('c-ads-x').value = currentWeapon.adsPos.x;
+            document.getElementById('c-ads-y').value = currentWeapon.adsPos.y;
+            document.getElementById('c-ads-z').value = currentWeapon.adsPos.z;
+            if (!currentWeapon.isMelee) {
+                document.getElementById('c-muz-y').value = currentWeapon.flashY;
+                document.getElementById('c-muz-z').value = currentWeapon.flashZ;
             }
 
             camera.add(gunGroup);
@@ -316,14 +349,7 @@
         function buildPlayerModel(id, baseColor, wIndex = 0) {
             const pGroup = new THREE.Group();
             
-            pGroup.userData = { 
-                id: id, 
-                isReloading: false, 
-                isSwinging: false, 
-                animStartTime: 0, 
-                recoil: new THREE.Vector3() 
-            };
-            
+            pGroup.userData = { id: id, isReloading: false, isSwinging: false, animStartTime: 0, recoil: new THREE.Vector3() };
             const pMat = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.6, metalness: 0.1 });
             
             const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.4), pMat);
@@ -342,10 +368,7 @@
             const tpWeapons = [];
             WEAPONS.forEach((w, idx) => {
                 const wModel = new THREE.Group();
-                // If baseScene loaded successfully, clone it for this specific player
-                if (w.baseScene) {
-                    wModel.add(w.baseScene.clone());
-                }
+                if (w.baseScene) wModel.add(w.baseScene.clone());
                 wModel.position.set(0.3, -0.2, -0.4); 
                 wModel.visible = (idx === wIndex); 
                 weaponPivot.add(wModel);
@@ -370,30 +393,84 @@
         let isShooting = false, isAiming = false, isReloading = false;
         let isSwinging = false; let swingStartTime = 0; let shotCount = 0; let lastFireTime = 0;
         let isPaused = false; 
+        let isConfigMode = false; // Flag for developer configuration
 
         const controls = new PointerLockControls(camera, document.body);
         controls.pointerSpeed = 1.0;
 
         controls.addEventListener('lock', () => {
-            isPaused = false;
-            if (inGame) {
-                document.getElementById('pause-menu').style.display = 'none';
-                document.getElementById('main-menu').style.display = 'none';
-                document.getElementById('ui-layer').style.display = 'flex';
+            if (!isConfigMode) {
+                isPaused = false;
+                if (inGame) {
+                    document.getElementById('pause-menu').style.display = 'none';
+                    document.getElementById('main-menu').style.display = 'none';
+                    document.getElementById('ui-layer').style.display = 'flex';
+                }
             }
         });
 
         controls.addEventListener('unlock', () => {
-            isPaused = true;
-            document.getElementById('ui-layer').style.display = 'none';
-            isShooting = false; isAiming = false; isSwinging = false; shotCount = 0;
-            controls.pointerSpeed = 1.0;
-            for (let k in keys) keys[k] = false;
-            if (inGame) {
-                document.getElementById('pause-menu').style.display = 'flex';
-                document.getElementById('pause-players-display').innerText = Object.keys(players).length + 1; 
-            } else { document.getElementById('main-menu').style.display = 'flex'; }
+            if (!isConfigMode) {
+                isPaused = true;
+                document.getElementById('ui-layer').style.display = 'none';
+                isShooting = false; isAiming = false; isSwinging = false; shotCount = 0;
+                controls.pointerSpeed = 1.0;
+                for (let k in keys) keys[k] = false;
+                if (inGame) {
+                    document.getElementById('pause-menu').style.display = 'flex';
+                    document.getElementById('pause-players-display').innerText = Object.keys(players).length + 1; 
+                } else { document.getElementById('main-menu').style.display = 'flex'; }
+            }
         });
+
+        // --- DEV CONFIGURATION UI BINDINGS ---
+        const configUI = document.getElementById('dev-config');
+        
+        ['x', 'y', 'z'].forEach(axis => {
+            document.getElementById(`c-ads-${axis}`).addEventListener('input', (e) => {
+                currentWeapon.adsPos[axis] = parseFloat(e.target.value);
+            });
+        });
+
+        ['y', 'z'].forEach(axis => {
+            document.getElementById(`c-muz-${axis}`).addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                if (axis === 'y') currentWeapon.flashY = val;
+                if (axis === 'z') currentWeapon.flashZ = val;
+                
+                if (flashSprite && refMarker && flashLight) {
+                    flashSprite.position.set(0, currentWeapon.flashY, currentWeapon.flashZ);
+                    flashLight.position.set(0, currentWeapon.flashY, currentWeapon.flashZ);
+                    refMarker.position.set(0, currentWeapon.flashY, currentWeapon.flashZ);
+                }
+            });
+        });
+
+        document.getElementById('config-log-btn').addEventListener('click', () => {
+            console.log(`=== Weapon Config for ${currentWeapon.name} ===`);
+            console.log(`adsPos: new THREE.Vector3(${currentWeapon.adsPos.x}, ${currentWeapon.adsPos.y}, ${currentWeapon.adsPos.z})`);
+            if (!currentWeapon.isMelee) {
+                console.log(`flashY: ${currentWeapon.flashY}, flashZ: ${currentWeapon.flashZ}`);
+            }
+            console.log("=========================================");
+            alert(`Config for ${currentWeapon.name} logged to Browser Console!`);
+        });
+
+        function toggleConfigMode() {
+            if (!inGame) return;
+            isConfigMode = !isConfigMode;
+            if (isConfigMode) {
+                controls.unlock();
+                configUI.style.display = 'block';
+                if (refMarker) refMarker.visible = true;
+            } else {
+                configUI.style.display = 'none';
+                if (refMarker) refMarker.visible = false;
+                controls.lock();
+            }
+        }
+
+        // -------------------------------------
 
         function updateMyHealth(hp) {
             myHealth = hp;
@@ -629,6 +706,12 @@
         }
 
         document.addEventListener('mousedown', (e) => {
+            // Allow clicking sliders if in config mode
+            if (isConfigMode) {
+                if (e.button === 2 && !isReloading && !currentWeapon.isMelee) { isAiming = true; }
+                return; 
+            }
+            
             if (!controls.isLocked || !inGame || isPaused) return;
             if (e.button === 0) {
                 if (currentWeapon.auto && !currentWeapon.isMelee) { isShooting = true; } else {
@@ -649,7 +732,7 @@
         });
 
         window.addEventListener('wheel', (e) => {
-            if (!controls.isLocked || !inGame || isReloading || isSwinging || isPaused) return;
+            if (!controls.isLocked || !inGame || isReloading || isSwinging || isPaused || isConfigMode) return;
             let nextIndex = currentWeaponIndex;
             if (e.deltaY > 0) nextIndex = (currentWeaponIndex + 1) % WEAPONS.length;
             else if (e.deltaY < 0) nextIndex = (currentWeaponIndex - 1 + WEAPONS.length) % WEAPONS.length;
@@ -658,8 +741,11 @@
 
         const keys = { w: false, a: false, s: false, d: false }; let canJump = false;
         document.addEventListener('keydown', (e) => {
-            if (!controls.isLocked || isPaused) return;
             const key = e.key.toLowerCase();
+            
+            if (key === 'c' && inGame) { toggleConfigMode(); return; }
+
+            if (!controls.isLocked || isPaused || isConfigMode) return;
             if (keys.hasOwnProperty(key)) keys[key] = true;
             if (key === 'r') reload();
             if (key === '1') equipWeapon(0); if (key === '2') equipWeapon(1); if (key === '3') equipWeapon(2); if (key === '4') equipWeapon(3);
@@ -730,7 +816,7 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            if (isPaused) return;
+            if (isPaused && !isConfigMode) return;
 
             const time = performance.now();
             const delta = Math.min((time - prevTime) / 1000, 0.1);
