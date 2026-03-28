@@ -80,7 +80,7 @@
 
     <div id="dev-config">
         <h3>Weapon Config</h3>
-        <p style="font-size: 0.8rem; color: #aaa; margin-bottom:15px;">Hold Right-Click to test ADS while adjusting sliders. Red sphere shows muzzle.</p>
+        <p style="font-size: 0.8rem; color: #aaa; margin-bottom:15px;">Hold Right-Click to test ADS while adjusting sliders. Red sphere is muzzle, Green sphere is center screen (ADS Target).</p>
         <div class="slider-group"><label>ADS X</label><input type="range" id="c-ads-x" min="-1" max="1" step="0.005" value="0"></div>
         <div class="slider-group"><label>ADS Y</label><input type="range" id="c-ads-y" min="-1" max="1" step="0.005" value="-0.11"></div>
         <div class="slider-group"><label>ADS Z</label><input type="range" id="c-ads-z" min="-1" max="1" step="0.005" value="-0.25"></div>
@@ -198,7 +198,7 @@
             createWall(MAP_SIZE/2, 0, 2, MAP_SIZE);  
         }
 
-        // --- MUZZLE FLASH & CONFIG REFERENCE MARKER ---
+        // --- MUZZLE FLASH & CONFIG REFERENCE MARKERS ---
         const flashCanvas = document.createElement('canvas'); flashCanvas.width = 128; flashCanvas.height = 128; const fCtx = flashCanvas.getContext('2d');
         const gradient = fCtx.createRadialGradient(64, 64, 0, 64, 64, 64); gradient.addColorStop(0, 'rgba(255, 255, 255, 1)'); gradient.addColorStop(0.2, 'rgba(255, 200, 50, 0.8)'); gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
         fCtx.fillStyle = gradient; fCtx.fillRect(0, 0, 128, 128); const flashTex = new THREE.CanvasTexture(flashCanvas);
@@ -209,6 +209,14 @@
         const markerGeo = new THREE.SphereGeometry(0.015, 8, 8);
         const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
 
+        // Green sphere to show exactly where the center of the screen (ADS target) is
+        const adsMarkerGeo = new THREE.SphereGeometry(0.0015, 8, 8);
+        const adsMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
+        const adsMarker = new THREE.Mesh(adsMarkerGeo, adsMarkerMat);
+        adsMarker.position.set(0, 0, -0.1); 
+        adsMarker.visible = false; 
+        camera.add(adsMarker);
+
         function attachFlash(group, zPos, yPos = 0.04) {
             const fSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, transparent: true, opacity: 0 }));
             fSprite.scale.set(0.4, 0.4, 0.4); fSprite.position.set(0, yPos, zPos); 
@@ -217,7 +225,7 @@
             // Reference marker for configuration
             const m = new THREE.Mesh(markerGeo, markerMat);
             m.position.copy(fSprite.position);
-            m.visible = false; // Hidden by default, toggled in Dev Mode
+            m.visible = false; 
 
             group.add(fSprite); group.add(fLight); group.add(m);
         }
@@ -284,13 +292,11 @@
                 flashLight = gunGroup.children[gunGroup.children.length - 2];
                 refMarker = gunGroup.children[gunGroup.children.length - 1];
                 
-                // Keep marker visible if config mode is on
                 if (isConfigMode && refMarker) refMarker.visible = true;
             } else {
                 flashSprite = null; flashLight = null; refMarker = null;
             }
 
-            // Sync dev sliders to current weapon
             document.getElementById('c-ads-x').value = currentWeapon.adsPos.x;
             document.getElementById('c-ads-y').value = currentWeapon.adsPos.y;
             document.getElementById('c-ads-z').value = currentWeapon.adsPos.z;
@@ -393,7 +399,7 @@
         let isShooting = false, isAiming = false, isReloading = false;
         let isSwinging = false; let swingStartTime = 0; let shotCount = 0; let lastFireTime = 0;
         let isPaused = false; 
-        let isConfigMode = false; // Flag for developer configuration
+        let isConfigMode = false; 
 
         const controls = new PointerLockControls(camera, document.body);
         controls.pointerSpeed = 1.0;
@@ -463,9 +469,37 @@
                 controls.unlock();
                 configUI.style.display = 'block';
                 if (refMarker) refMarker.visible = true;
+                adsMarker.visible = true;
+                
+                if (gunGroup) {
+                    gunGroup.traverse((child) => {
+                        if (child.isMesh && child.geometry !== markerGeo && child.geometry !== adsMarkerGeo) {
+                            if (child.material) {
+                                child.userData.origTransparent = child.material.transparent;
+                                child.userData.origOpacity = child.material.opacity;
+                                child.material.transparent = true;
+                                child.material.opacity = 0.4;
+                                child.material.needsUpdate = true;
+                            }
+                        }
+                    });
+                }
             } else {
                 configUI.style.display = 'none';
                 if (refMarker) refMarker.visible = false;
+                adsMarker.visible = false;
+                
+                if (gunGroup) {
+                    gunGroup.traverse((child) => {
+                        if (child.isMesh && child.geometry !== markerGeo && child.geometry !== adsMarkerGeo) {
+                            if (child.material) {
+                                child.material.transparent = child.userData.origTransparent || false;
+                                child.material.opacity = child.userData.origOpacity || 1.0;
+                                child.material.needsUpdate = true;
+                            }
+                        }
+                    });
+                }
                 controls.lock();
             }
         }
@@ -706,7 +740,6 @@
         }
 
         document.addEventListener('mousedown', (e) => {
-            // Allow clicking sliders if in config mode
             if (isConfigMode) {
                 if (e.button === 2 && !isReloading && !currentWeapon.isMelee) { isAiming = true; }
                 return; 
