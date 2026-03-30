@@ -10,10 +10,15 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Ensure maps directory exists
+// Ensure directories exist
 const mapsDir = path.join(__dirname, 'maps');
 if (!fs.existsSync(mapsDir)) {
     fs.mkdirSync(mapsDir);
+}
+
+const mapObjsDir = path.join(__dirname, 'public', 'assets', 'mapobjs');
+if (!fs.existsSync(mapObjsDir)) {
+    fs.mkdirSync(mapObjsDir, { recursive: true });
 }
 
 // Dynamically read the maps folder
@@ -37,6 +42,25 @@ function getAvailableMaps() {
     return maps;
 }
 
+// Dynamically read the mapobjs folder
+function getAvailableMapObjects() {
+    const objects = [];
+    try {
+        const files = fs.readdirSync(mapObjsDir);
+        files.forEach(file => {
+            if (file.endsWith('.glb') || file.endsWith('.gltf')) {
+                // Capitalize the first letter and remove the extension for a clean UI name
+                const rawName = file.replace(/\.(glb|gltf)$/, '');
+                const cleanName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+                objects.push({ name: cleanName, file: file });
+            }
+        });
+    } catch(err) {
+        console.error("Error reading mapobjs directory", err);
+    }
+    return objects;
+}
+
 const rooms = {};
 
 function broadcastRoomList() {
@@ -53,8 +77,10 @@ function broadcastRoomList() {
 io.on('connection', (socket) => {
     let currentRoom = null;
 
-    // Send available maps to client to populate the dropdown
+    // Send dynamic data to the client on connection
     socket.emit('mapList', getAvailableMaps());
+    socket.emit('mapObjectsList', getAvailableMapObjects());
+    
     broadcastRoomList();
 
     socket.on('joinRoom', (data) => {
@@ -67,7 +93,6 @@ io.on('connection', (socket) => {
         if (!rooms[currentRoom]) {
             let initialObjects = {};
             
-            // If the chosen map is a custom JSON file, load it from the disk
             if (data.mapId.toString().endsWith('.json')) {
                 try {
                     const mapData = fs.readFileSync(path.join(mapsDir, data.mapId), 'utf-8');
