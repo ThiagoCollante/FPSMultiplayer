@@ -318,7 +318,7 @@
             if (isMapEditorMode) {
                 if (gunGroup) gunGroup.visible = false;
                 document.getElementById('crosshair').style.opacity = '1';
-                velocity.set(0, 0, 0); // Halt gravity instantly
+                velocity.set(0, 0, 0); 
                 updateEditorPreview();
             } else {
                 if (gunGroup) gunGroup.visible = true;
@@ -577,10 +577,17 @@
         }
 
         // --- NETWORKING & GAME LOGIC ---
+        const players = {}; 
+        const ammoCounter = document.getElementById('ammo-counter');
+        const deathScreen = document.getElementById('death-screen');
+        const roomInput = document.getElementById('new-room-input');
+        const mapInput = document.getElementById('map-select');
+
         let inGame = false; let myHealth = 100; let isMoving = false;
         let isShooting = false, isAiming = false, isReloading = false;
         let isSwinging = false; let swingStartTime = 0; let shotCount = 0; let lastFireTime = 0;
         let isPaused = false; 
+        let isConfigMode = false; 
 
         const controls = new PointerLockControls(camera, document.body);
         controls.pointerSpeed = 1.0;
@@ -984,7 +991,6 @@
             if (nextIndex !== currentWeaponIndex) equipWeapon(nextIndex);
         });
 
-        // ADDED SPACE AND SHIFT KEYS
         const keys = { w: false, a: false, s: false, d: false, ' ': false, shift: false }; let canJump = false;
         
         document.addEventListener('keydown', (e) => {
@@ -1006,7 +1012,6 @@
             if (key === 'r') reload();
             if (key === '1') equipWeapon(0); if (key === '2') equipWeapon(1); if (key === '3') equipWeapon(2); if (key === '4') equipWeapon(3);
             
-            // JUMP LOGIC ONLY WHEN NOT IN EDITOR
             if (e.code === 'Space' && canJump && !isMapEditorMode) { velocity.y = 12; canJump = false; }
         });
         
@@ -1139,7 +1144,6 @@
 
                 inputVelocity.normalize();
                 
-                // IF IN MAP EDITOR - FREECAM MODE
                 if (isMapEditorMode) {
                     const freecamSpeed = moveSpeed * 2.0; 
                     inputVelocity.multiplyScalar(freecamSpeed * delta);
@@ -1157,7 +1161,6 @@
                     camera.position.add(worldMovement);
                     isMoving = inputVelocity.x !== 0 || inputVelocity.z !== 0 || keys[' '] || keys['shift'];
                 } else {
-                    // NORMAL FPS PHYSICS
                     const speed = isAiming ? moveSpeed * 0.4 : moveSpeed; 
                     inputVelocity.multiplyScalar(speed * delta);
 
