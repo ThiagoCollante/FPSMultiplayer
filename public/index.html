@@ -84,8 +84,10 @@
         </div>
         
         <div id="editor-ui">
-            <h3>Map Editor</h3>
+            <h3>Map Editor (Freecam)</h3>
             <p>Object: <span id="current-obj-name">...</span></p>
+            <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Fly around</p>
+            <p><kbd>Space</kbd> / <kbd>Shift</kbd> Fly Up/Down</p>
             <p><kbd>Scroll</kbd> Change Object</p>
             <p><kbd>Q</kbd> / <kbd>E</kbd> Rotate Object</p>
             <p><kbd>L-Click</kbd> Place Object</p>
@@ -316,9 +318,11 @@
             if (isMapEditorMode) {
                 if (gunGroup) gunGroup.visible = false;
                 document.getElementById('crosshair').style.opacity = '1';
+                velocity.set(0, 0, 0); // Halt gravity instantly
                 updateEditorPreview();
             } else {
                 if (gunGroup) gunGroup.visible = true;
+                velocity.set(0, 0, 0);
             }
         }
 
@@ -573,19 +577,11 @@
         }
 
         // --- NETWORKING & GAME LOGIC ---
-        const players = {}; 
-        const ammoCounter = document.getElementById('ammo-counter');
-        const deathScreen = document.getElementById('death-screen');
-        const roomInput = document.getElementById('new-room-input');
-        const mapInput = document.getElementById('map-select');
-        
         let inGame = false; let myHealth = 100; let isMoving = false;
         let isShooting = false, isAiming = false, isReloading = false;
         let isSwinging = false; let swingStartTime = 0; let shotCount = 0; let lastFireTime = 0;
         let isPaused = false; 
-        let isConfigMode = false; 
 
-        // ADDED MISSING VARIABLE
         const controls = new PointerLockControls(camera, document.body);
         controls.pointerSpeed = 1.0;
 
@@ -988,7 +984,9 @@
             if (nextIndex !== currentWeaponIndex) equipWeapon(nextIndex);
         });
 
-        const keys = { w: false, a: false, s: false, d: false }; let canJump = false;
+        // ADDED SPACE AND SHIFT KEYS
+        const keys = { w: false, a: false, s: false, d: false, ' ': false, shift: false }; let canJump = false;
+        
         document.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
             
@@ -997,6 +995,8 @@
 
             if (!controls.isLocked || isPaused || isConfigMode) return;
             if (keys.hasOwnProperty(key)) keys[key] = true;
+            if (e.code === 'Space') keys[' '] = true;
+            if (key === 'shift') keys['shift'] = true;
             
             if (isMapEditorMode) {
                 if (key === 'q') currentPreviewRotation += Math.PI / 4;
@@ -1005,10 +1005,16 @@
 
             if (key === 'r') reload();
             if (key === '1') equipWeapon(0); if (key === '2') equipWeapon(1); if (key === '3') equipWeapon(2); if (key === '4') equipWeapon(3);
-            if (e.code === 'Space' && canJump) { velocity.y = 12; canJump = false; }
+            
+            // JUMP LOGIC ONLY WHEN NOT IN EDITOR
+            if (e.code === 'Space' && canJump && !isMapEditorMode) { velocity.y = 12; canJump = false; }
         });
+        
         document.addEventListener('keyup', (e) => {
-            const key = e.key.toLowerCase(); if (keys.hasOwnProperty(key)) keys[key] = false;
+            const key = e.key.toLowerCase(); 
+            if (keys.hasOwnProperty(key)) keys[key] = false;
+            if (e.code === 'Space') keys[' '] = false;
+            if (key === 'shift') keys['shift'] = false;
         });
 
         // --- COLLISION ENGINE ---
@@ -1133,25 +1139,45 @@
 
                 inputVelocity.normalize();
                 
-                const speed = isAiming ? moveSpeed * 0.4 : moveSpeed; 
-                inputVelocity.multiplyScalar(speed * delta);
+                // IF IN MAP EDITOR - FREECAM MODE
+                if (isMapEditorMode) {
+                    const freecamSpeed = moveSpeed * 2.0; 
+                    inputVelocity.multiplyScalar(freecamSpeed * delta);
 
-                let forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
-                let right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+                    let forward = new THREE.Vector3(); camera.getWorldDirection(forward);
+                    let right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
 
-                let worldMovement = new THREE.Vector3(0, 0, 0);
-                worldMovement.addScaledVector(right, inputVelocity.x);
-                worldMovement.addScaledVector(forward, inputVelocity.z);
+                    let worldMovement = new THREE.Vector3(0, 0, 0);
+                    worldMovement.addScaledVector(right, inputVelocity.x);
+                    worldMovement.addScaledVector(forward, inputVelocity.z);
 
-                velocity.y -= 35.0 * delta; 
-                worldMovement.y = velocity.y * delta;
+                    if (keys[' ']) worldMovement.y += freecamSpeed * delta;
+                    if (keys['shift']) worldMovement.y -= freecamSpeed * delta;
 
-                applyCollisions(camera.position, worldMovement);
-                isMoving = inputVelocity.x !== 0 || inputVelocity.z !== 0;
+                    camera.position.add(worldMovement);
+                    isMoving = inputVelocity.x !== 0 || inputVelocity.z !== 0 || keys[' '] || keys['shift'];
+                } else {
+                    // NORMAL FPS PHYSICS
+                    const speed = isAiming ? moveSpeed * 0.4 : moveSpeed; 
+                    inputVelocity.multiplyScalar(speed * delta);
+
+                    let forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
+                    let right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+                    let worldMovement = new THREE.Vector3(0, 0, 0);
+                    worldMovement.addScaledVector(right, inputVelocity.x);
+                    worldMovement.addScaledVector(forward, inputVelocity.z);
+
+                    velocity.y -= 35.0 * delta; 
+                    worldMovement.y = velocity.y * delta;
+
+                    applyCollisions(camera.position, worldMovement);
+                    isMoving = inputVelocity.x !== 0 || inputVelocity.z !== 0;
+                }
             }
 
             let bobX = 0, bobY = 0;
-            if (isMoving && !isReloading && canJump && !isAiming) {
+            if (isMoving && !isReloading && canJump && !isAiming && !isMapEditorMode) {
                 bobX = Math.cos(time * 0.006) * 0.005; bobY = Math.sin(time * 0.012) * 0.01;
             }
 
