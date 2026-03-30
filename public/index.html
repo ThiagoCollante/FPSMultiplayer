@@ -27,6 +27,12 @@
         #weapon-info { position: absolute; bottom: 80px; right: 40px; font-size: 1.5rem; color: #aaa; font-weight: bold; text-shadow: 1px 1px 0px rgba(0,0,0,0.5); text-transform: uppercase;}
         #ammo-counter { position: absolute; bottom: 30px; right: 40px; font-size: 2.5rem; color: white; font-weight: bold; text-shadow: 2px 2px 0px rgba(0,0,0,0.5); pointer-events: none; transition: opacity 0.2s; }
 
+        /* Map Editor UI */
+        #editor-ui { position: absolute; top: 80px; left: 15px; background: rgba(20, 25, 40, 0.9); padding: 15px; border-radius: 8px; border: 1px solid #55f; color: white; display: none; z-index: 10; pointer-events: auto; }
+        #editor-ui h3 { margin: 0 0 10px 0; color: #55aaff; text-transform: uppercase; font-size: 1.1rem; }
+        #editor-ui p { margin: 5px 0; font-size: 0.9rem; color: #ccc; }
+        #current-obj-name { font-weight: bold; color: #fff; font-size: 1.2rem; }
+
         /* Dev Config UI */
         #dev-config { position: absolute; top: 20px; right: 20px; background: rgba(15, 20, 25, 0.95); padding: 20px; border-radius: 8px; border: 1px solid #444; color: white; display: none; z-index: 50; width: 300px; pointer-events: auto; }
         #dev-config h3 { margin-top: 0; color: #00ffcc; text-transform: uppercase; font-size: 1.2rem; }
@@ -76,6 +82,16 @@
             <div id="health-bar"></div>
             <div id="health-text">100 HP</div>
         </div>
+        
+        <div id="editor-ui">
+            <h3>Map Editor</h3>
+            <p>Object: <span id="current-obj-name">Crate</span></p>
+            <p><kbd>Scroll</kbd> Change Object</p>
+            <p><kbd>Q</kbd> / <kbd>E</kbd> Rotate Object</p>
+            <p><kbd>L-Click</kbd> Place Object</p>
+            <p><kbd>R-Click</kbd> Delete Target</p>
+            <button id="save-map-btn" class="btn" style="background:#00ffcc; color:#000; margin-top:15px;">Download Map</button>
+        </div>
     </div>
 
     <div id="dev-config">
@@ -98,9 +114,7 @@
             <div class="input-group">
                 <input type="text" id="new-room-input" placeholder="Room Name...">
                 <select id="map-select">
-                    <option value="1">Map 1: Arena</option>
-                    <option value="2">Map 2: Warehouse</option>
-                    <option value="3">Map 3: Labyrinth</option>
+                    <option value="1">Loading Maps...</option>
                 </select>
             </div>
             <button class="btn" id="create-room-btn">Create & Join</button>
@@ -116,7 +130,8 @@
             <div class="data-row">Room: <span id="pause-room-display">...</span></div>
             <div class="data-row">Players: <span id="pause-players-display">1</span></div>
             <p style="color:#aaa; font-size:0.9rem; margin-bottom:20px;">
-                <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move • <kbd>1</kbd>-<kbd>4</kbd> Weapons • <kbd>C</kbd> Config<br><br>
+                <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move • <kbd>1</kbd>-<kbd>4</kbd> Weapons<br>
+                <kbd>M</kbd> Map Editor • <kbd>C</kbd> Weapon Config<br><br>
                 <kbd>L/R Click</kbd> Fire/Aim • <kbd>R</kbd> Reload
             </p>
             <button class="btn" id="resume-btn" style="background:#00ffcc; color:#000;">Resume Game</button>
@@ -133,6 +148,8 @@
         import { PointerLockControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/PointerLockControls.js';
         import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
         import { io } from "https://cdn.socket.io/4.7.2/socket.io.esm.min.js";
+
+        const socket = io(); 
 
         // --- SCENE SETUP ---
         const scene = new THREE.Scene();
@@ -176,6 +193,9 @@
 
         const envGroup = new THREE.Group();
         scene.add(envGroup);
+        
+        const customObjGroup = new THREE.Group();
+        scene.add(customObjGroup);
 
         const wallMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 1.0 });
         let boundingBoxes = [];
@@ -189,14 +209,187 @@
             boundingBoxes.push(new THREE.Box3().setFromObject(wall));
         }
 
+        let seed = 12345;
+        function seededRandom() {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280;
+        }
+
+        const pillarMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.6, roughness: 0.4 });
+        
         function loadMap(mapId) {
             envGroup.clear();
             boundingBoxes = [];
+            seed = 12345; 
+
+            // Standard boundaries for all maps
             createWall(0, -MAP_SIZE/2, MAP_SIZE, 2); 
             createWall(0, MAP_SIZE/2, MAP_SIZE, 2);  
             createWall(-MAP_SIZE/2, 0, 2, MAP_SIZE); 
             createWall(MAP_SIZE/2, 0, 2, MAP_SIZE);  
+
+            if (mapId === '2' || mapId === 2) {
+                for (let x = -MAP_SIZE/2 + 10; x < MAP_SIZE/2; x += 20) {
+                    for (let z = -MAP_SIZE/2 + 10; z < MAP_SIZE/2; z += 20) {
+                        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 15, 1.5), pillarMat);
+                        mesh.position.set(x, 15/2, z);
+                        mesh.castShadow = true; mesh.receiveShadow = true;
+                        envGroup.add(mesh);
+                        mesh.updateMatrixWorld();
+                        boundingBoxes.push(new THREE.Box3().setFromObject(mesh));
+                    }
+                }
+            } else if (mapId === '3' || mapId === 3) {
+                createWall(-10, -10, 20, 2);
+                createWall(10, -10, 2, 20);
+                createWall(10, 10, 20, 2);
+                createWall(-10, 10, 2, 20);
+                const centerMesh = new THREE.Mesh(new THREE.BoxGeometry(6, 15, 6), pillarMat);
+                centerMesh.position.set(0, 15/2, 0);
+                envGroup.add(centerMesh);
+                centerMesh.updateMatrixWorld();
+                boundingBoxes.push(new THREE.Box3().setFromObject(centerMesh));
+            } else {
+                // Empty Arena for map 1 or when loading custom JSON maps
+                const light = new THREE.PointLight(0xffffff, 1.5, 100);
+                light.position.set(0, 14, 0); envGroup.add(light);
+            }
         }
+
+        // --- MAP EDITOR SYSTEM ---
+        const MAP_OBJS = [
+            { name: "Crate", file: "crate.glb" },
+            { name: "Barrel", file: "barrel.glb" },
+            { name: "Wall Segment", file: "wall.glb" }
+        ];
+
+        let isMapEditorMode = false;
+        let currentMapObjIndex = 0;
+        let mapObjPreview = new THREE.Group();
+        let currentPreviewRotation = 0;
+        scene.add(mapObjPreview);
+
+        const gltfLoader = new GLTFLoader();
+        
+        MAP_OBJS.forEach(obj => {
+            obj.scene = null;
+            gltfLoader.load(`assets/mapobjs/${obj.file}`, (gltf) => {
+                gltf.scene.traverse((child) => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
+                obj.scene = gltf.scene;
+                if (currentMapObjIndex === MAP_OBJS.indexOf(obj)) updateEditorPreview();
+            }, undefined, (err) => {
+                const fallback = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({color: 0x0055ff}));
+                fallback.castShadow = true; fallback.receiveShadow = true;
+                obj.scene = fallback;
+                if (currentMapObjIndex === MAP_OBJS.indexOf(obj)) updateEditorPreview();
+            });
+        });
+
+        function updateEditorPreview() {
+            mapObjPreview.clear();
+            const objDef = MAP_OBJS[currentMapObjIndex];
+            document.getElementById('current-obj-name').innerText = objDef.name;
+            
+            if (objDef.scene) {
+                const clone = objDef.scene.clone();
+                clone.traverse(child => {
+                    if (child.isMesh && child.material) {
+                        child.material = child.material.clone();
+                        child.material.transparent = true;
+                        child.material.opacity = 0.5;
+                        child.material.emissive = new THREE.Color(0x00ff00);
+                        child.material.emissiveIntensity = 0.2;
+                    }
+                });
+                mapObjPreview.add(clone);
+            }
+        }
+
+        function toggleMapEditor() {
+            if (!inGame || isConfigMode) return;
+            isMapEditorMode = !isMapEditorMode;
+            document.getElementById('editor-ui').style.display = isMapEditorMode ? 'block' : 'none';
+            mapObjPreview.visible = isMapEditorMode;
+            
+            if (isMapEditorMode) {
+                if (gunGroup) gunGroup.visible = false;
+                document.getElementById('crosshair').style.opacity = '1';
+                updateEditorPreview();
+            } else {
+                if (gunGroup) gunGroup.visible = true;
+            }
+        }
+
+        let placedCustomObjects = {};
+        
+        function rebuildCustomBoundingBoxes() {
+            boundingBoxes = boundingBoxes.filter(box => !box.isCustomObject);
+            for (let id in placedCustomObjects) {
+                const mesh = placedCustomObjects[id];
+                mesh.updateMatrixWorld();
+                const box = new THREE.Box3().setFromObject(mesh);
+                box.isCustomObject = true;
+                boundingBoxes.push(box);
+            }
+        }
+
+        function spawnCustomObject(data) {
+            if (placedCustomObjects[data.id]) return;
+            const objDef = MAP_OBJS[data.typeIndex];
+            if (objDef && objDef.scene) {
+                const mesh = objDef.scene.clone();
+                mesh.position.copy(data.position);
+                mesh.rotation.y = data.rotation;
+                mesh.userData.customObjId = data.id; 
+                mesh.userData.typeIndex = data.typeIndex; 
+                customObjGroup.add(mesh);
+                placedCustomObjects[data.id] = mesh;
+                rebuildCustomBoundingBoxes();
+            }
+        }
+
+        document.getElementById('save-map-btn').addEventListener('click', () => {
+            const mapData = {};
+            for (let id in placedCustomObjects) {
+                const mesh = placedCustomObjects[id];
+                mapData[id] = {
+                    id: id,
+                    typeIndex: mesh.userData.typeIndex,
+                    position: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
+                    rotation: mesh.rotation.y
+                };
+            }
+            
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(mapData));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href",     dataStr);
+            dlAnchorElem.setAttribute("download", "custom_map_" + Date.now() + ".json");
+            document.body.appendChild(dlAnchorElem);
+            dlAnchorElem.click();
+            dlAnchorElem.remove();
+        });
+
+        socket.on('objectSpawned', spawnCustomObject);
+        
+        socket.on('objectDeleted', (id) => {
+            if (placedCustomObjects[id]) {
+                customObjGroup.remove(placedCustomObjects[id]);
+                delete placedCustomObjects[id];
+                rebuildCustomBoundingBoxes();
+            }
+        });
+
+        // Dynamic Map List Loading
+        socket.on('mapList', (maps) => {
+            const select = document.getElementById('map-select');
+            select.innerHTML = '';
+            maps.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.innerText = m.name;
+                select.appendChild(opt);
+            });
+        });
 
         // --- MUZZLE FLASH & CONFIG REFERENCE MARKERS ---
         const flashCanvas = document.createElement('canvas'); flashCanvas.width = 128; flashCanvas.height = 128; const fCtx = flashCanvas.getContext('2d');
@@ -205,11 +398,9 @@
 
         let flashSprite, flashLight, refMarker; 
         
-        // Red sphere to show exactly where the muzzle is during config
         const markerGeo = new THREE.SphereGeometry(0.015, 8, 8);
         const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
 
-        // Green sphere to show exactly where the center of the screen (ADS target) is
         const adsMarkerGeo = new THREE.SphereGeometry(0.0015, 8, 8);
         const adsMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
         const adsMarker = new THREE.Mesh(adsMarkerGeo, adsMarkerMat);
@@ -222,17 +413,12 @@
             fSprite.scale.set(0.4, 0.4, 0.4); fSprite.position.set(0, yPos, zPos); 
             const fLight = new THREE.PointLight(0xffaa00, 0, 5); fLight.position.copy(fSprite.position); 
             
-            // Reference marker for configuration
             const m = new THREE.Mesh(markerGeo, markerMat);
-            m.position.copy(fSprite.position);
-            m.visible = false; 
-
+            m.position.copy(fSprite.position); m.visible = false; 
             group.add(fSprite); group.add(fLight); group.add(m);
         }
 
         // --- GLTF WEAPON LOADER ---
-        const gltfLoader = new GLTFLoader();
-
         const WEAPONS = [
             { id: 1, name: "Assault Rifle", filename: 'ar.glb', isMelee: false, maxAmmo: 30, currentAmmo: 30, fireRate: 0.09, damage: 25, pellets: 1, auto: true, reloadTime: 1500, adsFov: 50, hipPos: new THREE.Vector3(0.2, -0.2, -0.35), adsPos: new THREE.Vector3(0, -0.105, -0.25), flashZ: -0.365, flashY: 0.06 },
             { id: 2, name: "Sniper Rifle", filename: 'sniper.glb', isMelee: false, maxAmmo: 5, currentAmmo: 5, fireRate: 1.5, damage: 100, pellets: 1, auto: false, reloadTime: 2500, adsFov: 15, hipPos: new THREE.Vector3(0.25, -0.2, -0.3), adsPos: new THREE.Vector3(0, -0.12, -0.15), flashZ: -0.85, flashY: 0.04 },
@@ -266,18 +452,15 @@
                     flashLight = w.model.children[w.model.children.length - 2];
                     refMarker = w.model.children[w.model.children.length - 1];
                 }
-
             }, undefined, (error) => {
-                console.error(`Error loading ${w.filename}, spawning fallback cube:`, error);
                 const fallback = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.4), new THREE.MeshStandardMaterial({color: 0x555555}));
-                w.baseScene = fallback;
-                w.model.add(fallback.clone());
+                w.baseScene = fallback; w.model.add(fallback.clone());
                 if (!w.isMelee) attachFlash(w.model, w.flashZ, w.flashY);
             });
         });
 
         function equipWeapon(index) {
-            if (isReloading || !inGame || index < 0 || index >= WEAPONS.length) return;
+            if (isReloading || !inGame || index < 0 || index >= WEAPONS.length || isMapEditorMode) return;
             if (WEAPONS[index] === currentWeapon && gunGroup !== null) return;
             
             if (gunGroup) camera.remove(gunGroup);
@@ -388,21 +571,11 @@
         }
 
         // --- NETWORKING & GAME LOGIC ---
-        const socket = io(); 
-        const players = {}; 
-        const ammoCounter = document.getElementById('ammo-counter');
-        const deathScreen = document.getElementById('death-screen');
-        const roomInput = document.getElementById('new-room-input');
-        const mapInput = document.getElementById('map-select');
-        
         let inGame = false; let myHealth = 100; let isMoving = false;
         let isShooting = false, isAiming = false, isReloading = false;
         let isSwinging = false; let swingStartTime = 0; let shotCount = 0; let lastFireTime = 0;
         let isPaused = false; 
         let isConfigMode = false; 
-
-        const controls = new PointerLockControls(camera, document.body);
-        controls.pointerSpeed = 1.0;
 
         controls.addEventListener('lock', () => {
             if (!isConfigMode) {
@@ -463,7 +636,7 @@
         });
 
         function toggleConfigMode() {
-            if (!inGame) return;
+            if (!inGame || isMapEditorMode) return;
             isConfigMode = !isConfigMode;
             if (isConfigMode) {
                 controls.unlock();
@@ -542,26 +715,26 @@
         document.getElementById('leave-btn').addEventListener('click', () => {
             socket.emit('leaveRoom'); inGame = false;
             for (let id in players) { scene.remove(players[id]); delete players[id]; }
+            
+            for (let id in placedCustomObjects) { customObjGroup.remove(placedCustomObjects[id]); delete placedCustomObjects[id]; }
+            rebuildCustomBoundingBoxes();
+
             camera.position.set(0, 1.7, 0);
             if (gunGroup) camera.remove(gunGroup); 
             document.getElementById('pause-menu').style.display = 'none';
             document.getElementById('main-menu').style.display = 'flex';
         });
 
-        socket.on('availableRooms', (rooms) => {
-            const list = document.getElementById('server-list');
-            if (rooms.length === 0) { list.innerHTML = '<p style="color: #888; text-align: center;">No active rooms.</p>'; return; }
-            list.innerHTML = '';
-            rooms.forEach(room => {
-                const div = document.createElement('div'); div.className = 'server-item';
-                div.innerHTML = `<span><strong>${room.name}</strong> (${room.players}) [Map ${room.mapId}]</span><button class="btn join-btn">Join</button>`;
-                div.querySelector('.join-btn').addEventListener('click', () => enterGame(room.name, room.mapId));
-                list.appendChild(div);
-            });
-        });
-
         socket.on('roomState', (data) => {
             clearDecals(); loadMap(data.mapId); 
+            
+            for (let id in placedCustomObjects) { customObjGroup.remove(placedCustomObjects[id]); delete placedCustomObjects[id]; }
+            if (data.customObjects) {
+                for (let id in data.customObjects) {
+                    spawnCustomObject(data.customObjects[id]);
+                }
+            }
+
             for (let id in players) { scene.remove(players[id]); delete players[id]; } 
             for (let id in data.players) {
                 if (id === socket.id) { updateMyHealth(data.players[id].health); continue; }
@@ -631,7 +804,6 @@
         });
 
         // --- SHOOTING MATH ---
-        const raycaster = new THREE.Raycaster();
         const gunRecoilOffset = new THREE.Vector3(); const gunRecoilRot = new THREE.Euler();
         let reloadStartTime = 0;
 
@@ -695,7 +867,7 @@
                     document.getElementById('ch-right').style.transform = `translateX(${spreadPixels}px)`;
                 }
 
-                const hitTargets = [floor, ...envGroup.children];
+                const hitTargets = [floor, ...envGroup.children, ...customObjGroup.children];
                 for (let id in players) { hitTargets.push(players[id]); }
 
                 const intersects = raycaster.intersectObjects(hitTargets, true);
@@ -710,7 +882,7 @@
 
                     let rootObject = hitObject;
 
-                    if (rootObject === floor || envGroup.children.includes(rootObject)) { 
+                    if (rootObject === floor || envGroup.children.includes(rootObject) || customObjGroup.children.includes(rootObject)) { 
                         createDecal(intersects[0], currentWeapon.isMelee); 
                     } else {
                         while (rootObject.parent && rootObject.userData.id === undefined) rootObject = rootObject.parent;
@@ -744,6 +916,29 @@
                 if (e.button === 2 && !isReloading && !currentWeapon.isMelee) { isAiming = true; }
                 return; 
             }
+
+            if (isMapEditorMode) {
+                if (e.button === 0 && mapObjPreview.visible) { 
+                    const uniqueId = `obj_${socket.id}_${Date.now()}`;
+                    socket.emit('spawnObject', {
+                        id: uniqueId,
+                        typeIndex: currentMapObjIndex,
+                        position: { x: mapObjPreview.position.x, y: mapObjPreview.position.y, z: mapObjPreview.position.z },
+                        rotation: currentPreviewRotation
+                    });
+                } else if (e.button === 2) { 
+                    raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+                    const intersects = raycaster.intersectObjects(customObjGroup.children, true);
+                    if (intersects.length > 0) {
+                        let rootObject = intersects[0].object;
+                        while (rootObject.parent && rootObject.userData.customObjId === undefined) rootObject = rootObject.parent;
+                        if (rootObject.userData.customObjId) {
+                            socket.emit('deleteObject', rootObject.userData.customObjId);
+                        }
+                    }
+                }
+                return;
+            }
             
             if (!controls.isLocked || !inGame || isPaused) return;
             if (e.button === 0) {
@@ -766,6 +961,14 @@
 
         window.addEventListener('wheel', (e) => {
             if (!controls.isLocked || !inGame || isReloading || isSwinging || isPaused || isConfigMode) return;
+            
+            if (isMapEditorMode) {
+                if (e.deltaY > 0) currentMapObjIndex = (currentMapObjIndex + 1) % MAP_OBJS.length;
+                else if (e.deltaY < 0) currentMapObjIndex = (currentMapObjIndex - 1 + MAP_OBJS.length) % MAP_OBJS.length;
+                updateEditorPreview();
+                return;
+            }
+
             let nextIndex = currentWeaponIndex;
             if (e.deltaY > 0) nextIndex = (currentWeaponIndex + 1) % WEAPONS.length;
             else if (e.deltaY < 0) nextIndex = (currentWeaponIndex - 1 + WEAPONS.length) % WEAPONS.length;
@@ -777,9 +980,16 @@
             const key = e.key.toLowerCase();
             
             if (key === 'c' && inGame) { toggleConfigMode(); return; }
+            if (key === 'm' && inGame) { toggleMapEditor(); return; }
 
             if (!controls.isLocked || isPaused || isConfigMode) return;
             if (keys.hasOwnProperty(key)) keys[key] = true;
+            
+            if (isMapEditorMode) {
+                if (key === 'q') currentPreviewRotation += Math.PI / 4;
+                if (key === 'e') currentPreviewRotation -= Math.PI / 4;
+            }
+
             if (key === 'r') reload();
             if (key === '1') equipWeapon(0); if (key === '2') equipWeapon(1); if (key === '3') equipWeapon(2); if (key === '4') equipWeapon(3);
             if (e.code === 'Space' && canJump) { velocity.y = 12; canJump = false; }
@@ -849,13 +1059,24 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            if (isPaused && !isConfigMode) return;
+            if (isPaused && !isConfigMode && !isMapEditorMode) return;
 
             const time = performance.now();
             const delta = Math.min((time - prevTime) / 1000, 0.1);
             prevTime = time;
 
-            if (isShooting && currentWeapon.auto && !isReloading && controls.isLocked) {
+            if (isMapEditorMode && inGame && controls.isLocked) {
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                const hitTargets = [floor, ...envGroup.children, ...customObjGroup.children];
+                const intersects = raycaster.intersectObjects(hitTargets, true);
+                
+                if (intersects.length > 0) {
+                    mapObjPreview.position.copy(intersects[0].point);
+                    mapObjPreview.rotation.y = currentPreviewRotation;
+                }
+            }
+
+            if (isShooting && currentWeapon.auto && !isReloading && controls.isLocked && !isMapEditorMode) {
                 if (time / 1000 - lastFireTime > currentWeapon.fireRate) { fireWeapon(); lastFireTime = time / 1000; }
             }
 
@@ -922,7 +1143,7 @@
             }
 
             // Local Gun Animations
-            if (gunGroup) {
+            if (gunGroup && !isMapEditorMode) {
                 if (isReloading) {
                     let progress = (time - reloadStartTime) / currentWeapon.reloadTime;
                     if (progress >= 1) { progress = 1; isReloading = false; currentWeapon.currentAmmo = currentWeapon.maxAmmo; updateAmmoUI(); }
