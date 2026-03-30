@@ -85,7 +85,7 @@
         
         <div id="editor-ui">
             <h3>Map Editor</h3>
-            <p>Object: <span id="current-obj-name">Crate</span></p>
+            <p>Object: <span id="current-obj-name">...</span></p>
             <p><kbd>Scroll</kbd> Change Object</p>
             <p><kbd>Q</kbd> / <kbd>E</kbd> Rotate Object</p>
             <p><kbd>L-Click</kbd> Place Object</p>
@@ -222,7 +222,6 @@
             boundingBoxes = [];
             seed = 12345; 
 
-            // Standard boundaries for all maps
             createWall(0, -MAP_SIZE/2, MAP_SIZE, 2); 
             createWall(0, MAP_SIZE/2, MAP_SIZE, 2);  
             createWall(-MAP_SIZE/2, 0, 2, MAP_SIZE); 
@@ -250,19 +249,13 @@
                 centerMesh.updateMatrixWorld();
                 boundingBoxes.push(new THREE.Box3().setFromObject(centerMesh));
             } else {
-                // Empty Arena for map 1 or when loading custom JSON maps
                 const light = new THREE.PointLight(0xffffff, 1.5, 100);
                 light.position.set(0, 14, 0); envGroup.add(light);
             }
         }
 
         // --- MAP EDITOR SYSTEM ---
-        const MAP_OBJS = [
-            { name: "Crate", file: "crate.glb" },
-            { name: "Barrel", file: "barrel.glb" },
-            { name: "Wall Segment", file: "wall.glb" }
-        ];
-
+        let MAP_OBJS = []; // Dynamically populated from server
         let isMapEditorMode = false;
         let currentMapObjIndex = 0;
         let mapObjPreview = new THREE.Group();
@@ -271,21 +264,30 @@
 
         const gltfLoader = new GLTFLoader();
         
-        MAP_OBJS.forEach(obj => {
-            obj.scene = null;
-            gltfLoader.load(`assets/mapobjs/${obj.file}`, (gltf) => {
-                gltf.scene.traverse((child) => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
-                obj.scene = gltf.scene;
-                if (currentMapObjIndex === MAP_OBJS.indexOf(obj)) updateEditorPreview();
-            }, undefined, (err) => {
-                const fallback = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({color: 0x0055ff}));
-                fallback.castShadow = true; fallback.receiveShadow = true;
-                obj.scene = fallback;
-                if (currentMapObjIndex === MAP_OBJS.indexOf(obj)) updateEditorPreview();
+        socket.on('mapObjectsList', (objects) => {
+            MAP_OBJS = objects;
+            
+            MAP_OBJS.forEach((obj, index) => {
+                obj.scene = null;
+                gltfLoader.load(`assets/mapobjs/${obj.file}`, (gltf) => {
+                    gltf.scene.traverse((child) => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
+                    obj.scene = gltf.scene;
+                    if (currentMapObjIndex === index && isMapEditorMode) updateEditorPreview();
+                }, undefined, (err) => {
+                    const fallback = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({color: 0x0055ff}));
+                    fallback.castShadow = true; fallback.receiveShadow = true;
+                    obj.scene = fallback;
+                    if (currentMapObjIndex === index && isMapEditorMode) updateEditorPreview();
+                });
             });
+            
+            if (MAP_OBJS.length > 0 && isMapEditorMode) {
+                updateEditorPreview();
+            }
         });
 
         function updateEditorPreview() {
+            if (MAP_OBJS.length === 0) return;
             mapObjPreview.clear();
             const objDef = MAP_OBJS[currentMapObjIndex];
             document.getElementById('current-obj-name').innerText = objDef.name;
@@ -306,7 +308,7 @@
         }
 
         function toggleMapEditor() {
-            if (!inGame || isConfigMode) return;
+            if (!inGame || isConfigMode || MAP_OBJS.length === 0) return;
             isMapEditorMode = !isMapEditorMode;
             document.getElementById('editor-ui').style.display = isMapEditorMode ? 'block' : 'none';
             mapObjPreview.visible = isMapEditorMode;
@@ -575,7 +577,6 @@
         let isShooting = false, isAiming = false, isReloading = false;
         let isSwinging = false; let swingStartTime = 0; let shotCount = 0; let lastFireTime = 0;
         let isPaused = false; 
-        let isConfigMode = false; 
 
         controls.addEventListener('lock', () => {
             if (!isConfigMode) {
@@ -804,6 +805,7 @@
         });
 
         // --- SHOOTING MATH ---
+        const raycaster = new THREE.Raycaster();
         const gunRecoilOffset = new THREE.Vector3(); const gunRecoilRot = new THREE.Euler();
         let reloadStartTime = 0;
 
@@ -1065,7 +1067,7 @@
             const delta = Math.min((time - prevTime) / 1000, 0.1);
             prevTime = time;
 
-            if (isMapEditorMode && inGame && controls.isLocked) {
+            if (isMapEditorMode && inGame && controls.isLocked && MAP_OBJS.length > 0) {
                 raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
                 const hitTargets = [floor, ...envGroup.children, ...customObjGroup.children];
                 const intersects = raycaster.intersectObjects(hitTargets, true);
