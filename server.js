@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -9,7 +10,33 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Rooms now store { mapId, players: {} }
+// Ensure maps directory exists
+const mapsDir = path.join(__dirname, 'maps');
+if (!fs.existsSync(mapsDir)) {
+    fs.mkdirSync(mapsDir);
+}
+
+// Dynamically read the maps folder
+function getAvailableMaps() {
+    const maps = [
+        { id: '1', name: 'Map 1: Arena' },
+        { id: '2', name: 'Map 2: Warehouse' },
+        { id: '3', name: 'Map 3: Labyrinth' }
+    ];
+    
+    try {
+        const files = fs.readdirSync(mapsDir);
+        files.forEach(file => {
+            if (file.endsWith('.json')) {
+                maps.push({ id: file, name: `Custom: ${file.replace('.json', '')}` });
+            }
+        });
+    } catch(err) {
+        console.error("Error reading maps directory", err);
+    }
+    return maps;
+}
+
 const rooms = {};
 
 function broadcastRoomList() {
@@ -26,9 +53,10 @@ function broadcastRoomList() {
 io.on('connection', (socket) => {
     let currentRoom = null;
 
+    // Send available maps to client to populate the dropdown
+    socket.emit('mapList', getAvailableMaps());
     broadcastRoomList();
 
-    // Joining now accepts an object with the mapId
     socket.on('joinRoom', (data) => {
         if (currentRoom) leaveCurrentRoom(socket);
 
@@ -36,11 +64,23 @@ io.on('connection', (socket) => {
         socket.join(roomName);
         currentRoom = roomName;
         
-        // If room doesn't exist, create it and set the map
         if (!rooms[currentRoom]) {
+            let initialObjects = {};
+            
+            // If the chosen map is a custom JSON file, load it from the disk
+            if (data.mapId.toString().endsWith('.json')) {
+                try {
+                    const mapData = fs.readFileSync(path.join(mapsDir, data.mapId), 'utf-8');
+                    initialObjects = JSON.parse(mapData);
+                } catch(e) {
+                    console.error(`Failed to load custom map: ${data.mapId}`, e);
+                }
+            }
+
             rooms[currentRoom] = {
-                mapId: data.mapId || 1,
-                players: {}
+                mapId: data.mapId || '1',
+                players: {},
+                customObjects: initialObjects 
             };
         }
         
@@ -50,17 +90,16 @@ io.on('connection', (socket) => {
             rotation: { x: 0, y: 0 },
             color: Math.floor(Math.random() * 16777215), 
             health: 100,
-            weaponIndex: 0 // Default to first weapon
+            weaponIndex: 0 
         };
 
-        // Send the current room state (including the map) to the new player
         socket.emit('roomState', {
             mapId: rooms[currentRoom].mapId,
-            players: rooms[currentRoom].players
+            players: rooms[currentRoom].players,
+            customObjects: rooms[currentRoom].customObjects
         });
         
         socket.to(currentRoom).emit('newPlayer', rooms[currentRoom].players[socket.id]);
-        
         console.log(`[+] ${socket.id} joined ${roomName} (Map ${rooms[currentRoom].mapId})`);
         broadcastRoomList();
     });
@@ -97,7 +136,6 @@ io.on('connection', (socket) => {
         if (currentRoom && rooms[currentRoom].players[data.targetId]) {
             const target = rooms[currentRoom].players[data.targetId];
             
-            // Double the damage if it's a headshot
             let finalDamage = data.damage || 25;
             if (data.isHeadshot) {
                 finalDamage *= 2; 
@@ -113,6 +151,21 @@ io.on('connection', (socket) => {
             } else {
                 io.to(currentRoom).emit('updateHealth', { id: data.targetId, health: target.health });
             }
+        }
+    });
+
+    // Map Editor Events
+    socket.on('spawnObject', (data) => {
+        if (currentRoom && rooms[currentRoom]) {
+            rooms[currentRoom].customObjects[data.id] = data;
+            io.to(currentRoom).emit('objectSpawned', data);
+        }
+    });
+
+    socket.on('deleteObject', (id) => {
+        if (currentRoom && rooms[currentRoom] && rooms[currentRoom].customObjects[id]) {
+            delete rooms[currentRoom].customObjects[id];
+            io.to(currentRoom).emit('objectDeleted', id);
         }
     });
 
