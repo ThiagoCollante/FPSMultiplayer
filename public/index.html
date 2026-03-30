@@ -255,7 +255,7 @@
         }
 
         // --- MAP EDITOR SYSTEM ---
-        let MAP_OBJS = []; // Dynamically populated from server
+        let MAP_OBJS = []; 
         let isMapEditorMode = false;
         let currentMapObjIndex = 0;
         let mapObjPreview = new THREE.Group();
@@ -573,10 +573,21 @@
         }
 
         // --- NETWORKING & GAME LOGIC ---
+        const players = {}; 
+        const ammoCounter = document.getElementById('ammo-counter');
+        const deathScreen = document.getElementById('death-screen');
+        const roomInput = document.getElementById('new-room-input');
+        const mapInput = document.getElementById('map-select');
+        
         let inGame = false; let myHealth = 100; let isMoving = false;
         let isShooting = false, isAiming = false, isReloading = false;
         let isSwinging = false; let swingStartTime = 0; let shotCount = 0; let lastFireTime = 0;
         let isPaused = false; 
+        let isConfigMode = false; 
+
+        // ADDED MISSING VARIABLE
+        const controls = new PointerLockControls(camera, document.body);
+        controls.pointerSpeed = 1.0;
 
         controls.addEventListener('lock', () => {
             if (!isConfigMode) {
