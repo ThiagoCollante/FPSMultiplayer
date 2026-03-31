@@ -68,7 +68,7 @@
 <body>
 
     <div id="ui-layer">
-        <div id="room-info">Room: <span id="current-room-name">...</span></div>
+        <div id="room-info">Room: <span id="current-room-name">...</span> <span id="current-room-code" style="color: #ff4655; margin-left: 10px; font-size: 0.9em;"></span></div>
         <div id="crosshair">
             <div class="ch-line" id="ch-top"></div>
             <div class="ch-line" id="ch-bottom"></div>
@@ -98,7 +98,7 @@
 
     <div id="dev-config">
         <h3>Weapon Config</h3>
-        <p style="font-size: 0.8rem; color: #aaa; margin-bottom:15px;">Hold Right-Click to test ADS while adjusting sliders. Red sphere is muzzle, Green sphere is center screen (ADS Target).</p>
+        <p style="font-size: 0.8rem; color: #aaa; margin-bottom:15px;">Hold Right-Click to test ADS while adjusting sliders. Red sphere is muzzle, Green sphere is center screen.</p>
         <div class="slider-group"><label>ADS X</label><input type="range" id="c-ads-x" min="-1" max="1" step="0.005" value="0"></div>
         <div class="slider-group"><label>ADS Y</label><input type="range" id="c-ads-y" min="-1" max="1" step="0.005" value="-0.105"></div>
         <div class="slider-group"><label>ADS Z</label><input type="range" id="c-ads-z" min="-1" max="1" step="0.005" value="-0.25"></div>
@@ -112,24 +112,32 @@
     <div id="main-menu" class="overlay">
         <h1>Assault Range</h1>
         <div class="menu-box">
-            <h3>Create a Room</h3>
+            <h3>Create or Join Public Room</h3>
             <div class="input-group">
                 <input type="text" id="new-room-input" placeholder="Room Name...">
                 <select id="map-select">
                     <option value="1">Loading Maps...</option>
                 </select>
             </div>
-            <button class="btn" id="create-room-btn">Create & Join</button>
+            <button class="btn" id="create-room-btn">Play</button>
+
+            <h3 style="margin-top: 30px;">Join by Code</h3>
+            <div class="input-group">
+                <input type="text" id="join-code-input" placeholder="5-Digit Room Code" maxlength="5">
+                <button class="btn" id="join-code-btn" style="margin-top: 0; flex: 0.5;">Join</button>
+            </div>
             
             <h3 style="margin-top: 30px;">Active Servers</h3>
-            <div class="server-list" id="server-list"></div>
+            <div class="server-list" id="server-list">
+                <p style="color: #888; text-align: center;">Fetching active rooms...</p>
+            </div>
         </div>
     </div>
 
     <div id="pause-menu" class="overlay">
         <div class="menu-box">
             <h2>Game Paused</h2>
-            <div class="data-row">Room: <span id="pause-room-display">...</span></div>
+            <div class="data-row">Room: <span id="pause-room-display">...</span> <span style="font-size: 0.8em; color: #ff4655;">[Code: <span id="pause-code-display">...</span>]</span></div>
             <div class="data-row">Players: <span id="pause-players-display">1</span></div>
             <p style="color:#aaa; font-size:0.9rem; margin-bottom:20px;">
                 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move • <kbd>1</kbd>-<kbd>4</kbd> Weapons<br>
@@ -152,6 +160,9 @@
         import { io } from "https://cdn.socket.io/4.7.2/socket.io.esm.min.js";
 
         const socket = io(); 
+
+        // Request available rooms instantly to populate the menu
+        socket.emit('requestRoomList');
 
         // --- SCENE SETUP ---
         const scene = new THREE.Scene();
@@ -582,6 +593,7 @@
         const deathScreen = document.getElementById('death-screen');
         const roomInput = document.getElementById('new-room-input');
         const mapInput = document.getElementById('map-select');
+        const joinCodeInput = document.getElementById('join-code-input');
 
         let inGame = false; let myHealth = 100; let isMoving = false;
         let isShooting = false, isAiming = false, isReloading = false;
@@ -713,7 +725,7 @@
 
         function enterGame(roomName, mapId) {
             const finalRoomName = roomName.trim() || "Lobby";
-            roomInput.blur(); mapInput.blur();
+            roomInput.blur(); mapInput.blur(); joinCodeInput.blur();
             socket.emit('joinRoom', { roomName: finalRoomName, mapId: mapId });
             document.getElementById('current-room-name').innerText = finalRoomName;
             inGame = true; updateMyHealth(100); 
@@ -724,6 +736,20 @@
 
         document.getElementById('create-room-btn').addEventListener('click', () => { enterGame(roomInput.value, mapInput.value); });
         roomInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') enterGame(roomInput.value, mapInput.value); });
+        
+        document.getElementById('join-code-btn').addEventListener('click', () => {
+            const code = joinCodeInput.value.trim().toUpperCase();
+            if (code) socket.emit('joinByCode', code);
+        });
+
+        socket.on('joinCodeSuccess', (data) => {
+            enterGame(data.roomName, data.mapId);
+        });
+
+        socket.on('joinCodeError', (msg) => {
+            alert(msg);
+        });
+
         document.getElementById('resume-btn').addEventListener('click', () => { controls.lock(); });
         document.getElementById('pause-menu').addEventListener('click', (e) => { if (e.target.id === 'pause-menu' || e.target.className === 'menu-box') controls.lock(); });
         
@@ -740,9 +766,24 @@
             document.getElementById('main-menu').style.display = 'flex';
         });
 
+        socket.on('availableRooms', (rooms) => {
+            const list = document.getElementById('server-list');
+            if (rooms.length === 0) { list.innerHTML = '<p style="color: #888; text-align: center;">No active rooms.</p>'; return; }
+            list.innerHTML = '';
+            rooms.forEach(room => {
+                const div = document.createElement('div'); div.className = 'server-item';
+                div.innerHTML = `<span><strong>${room.name}</strong> <span style="color:#aaa; font-size:0.8em">[Code: ${room.code}]</span> (${room.players} players)</span><button class="btn join-btn">Join</button>`;
+                div.querySelector('.join-btn').addEventListener('click', () => enterGame(room.name, room.mapId));
+                list.appendChild(div);
+            });
+        });
+
         socket.on('roomState', (data) => {
             clearDecals(); loadMap(data.mapId); 
             
+            document.getElementById('current-room-code').innerText = `[Code: ${data.code}]`;
+            document.getElementById('pause-code-display').innerText = data.code;
+
             for (let id in placedCustomObjects) { customObjGroup.remove(placedCustomObjects[id]); delete placedCustomObjects[id]; }
             if (data.customObjects) {
                 for (let id in data.customObjects) {
