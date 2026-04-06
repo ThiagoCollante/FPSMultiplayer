@@ -328,7 +328,6 @@
             
             if (isMapEditorMode) {
                 if (gunGroup) gunGroup.visible = false;
-                document.getElementById('crosshair').style.opacity = '1';
                 velocity.set(0, 0, 0); 
                 updateEditorPreview();
             } else {
@@ -437,7 +436,7 @@
         // --- GLTF WEAPON LOADER ---
         const WEAPONS = [
             { id: 1, name: "Assault Rifle", filename: 'ar.glb', isMelee: false, maxAmmo: 30, currentAmmo: 30, fireRate: 0.09, damage: 25, pellets: 1, auto: true, reloadTime: 1500, adsFov: 50, hipPos: new THREE.Vector3(0.2, -0.2, -0.35), adsPos: new THREE.Vector3(0, -0.105, -0.25), flashZ: -0.365, flashY: 0.06 },
-            { id: 2, name: "Sniper Rifle", filename: 'sniper.glb', isMelee: false, maxAmmo: 5, currentAmmo: 5, fireRate: 1.5, damage: 100, pellets: 1, auto: false, reloadTime: 2500, adsFov: 15, hipPos: new THREE.Vector3(0.25, -0.2, -0.3), adsPos: new THREE.Vector3(0, -0.117, -0.15), flashZ: -0.85, flashY: 0.04 },
+            { id: 2, name: "Sniper Rifle", filename: 'sniper.glb', isMelee: false, maxAmmo: 5, currentAmmo: 5, fireRate: 1.5, damage: 100, pellets: 1, auto: false, reloadTime: 2500, adsFov: 15, hipPos: new THREE.Vector3(0.25, -0.2, -0.3), adsPos: new THREE.Vector3(0, -0.117, -0.032), flashZ: -0.85, flashY: 0.04 },
             { id: 3, name: "Shotgun", filename: 'shotgun.glb', isMelee: false, maxAmmo: 8, currentAmmo: 8, fireRate: 0.8, damage: 15, pellets: 8, auto: false, reloadTime: 2000, adsFov: 60, hipPos: new THREE.Vector3(0.25, -0.25, -0.35), adsPos: new THREE.Vector3(0, -0.055, -0.2), flashZ: -0.6, flashY: 0.02 },
             { id: 4, name: "Tactical Knife", filename: 'knife.glb', isMelee: true, range: 2.5, maxAmmo: Infinity, currentAmmo: Infinity, fireRate: 0.5, damage: 50, pellets: 1, auto: false, reloadTime: 0, adsFov: 75, hipPos: new THREE.Vector3(0.15, -0.15, -0.25), adsPos: new THREE.Vector3(0.15, -0.15, -0.25) }
         ];
@@ -888,6 +887,7 @@
         }
 
         function getSprayNDC(index) {
+            // Restore original spray/stray logic exactly
             const moveError = isMoving ? 0.1 : 0;
             const moveOffsetX = isMoving ? (Math.random() - 0.5) * moveError : 0;
             const moveOffsetY = isMoving ? (Math.random() - 0.5) * moveError : 0;
@@ -1187,7 +1187,8 @@
             document.getElementById('ch-left').style.transform = `translateX(-${currentCrosshairSpread}px)`;
             document.getElementById('ch-right').style.transform = `translateX(${currentCrosshairSpread}px)`;
             
-            document.getElementById('crosshair').style.opacity = '0.8';
+            // Revert crosshair visibility fix
+            document.getElementById('crosshair').style.opacity = (isAiming && !currentWeapon.isMelee) ? '0' : '0.8';
 
             const targetFov = isAiming ? currentWeapon.adsFov : 75;
             camera.fov += (targetFov - camera.fov) * 0.2;
