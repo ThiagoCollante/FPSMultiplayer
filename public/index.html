@@ -24,6 +24,9 @@
         #ch-right { top: 14px; right: 0; width: 10px; height: 2px; }
         #ch-center { top: 13px; left: 13px; width: 4px; height: 4px; background: rgba(0, 255, 150, 0.9); border-radius: 50%; }
 
+        /* Pure HTML 2D center marker for Dev Config to guarantee absolute center alignment */
+        #ads-center-marker { display: none; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background-color: #00ff00; border-radius: 50%; transform: translate(-50%, -50%); z-index: 100; pointer-events: none; box-shadow: 0 0 2px #000; }
+
         #weapon-info { position: absolute; bottom: 80px; right: 40px; font-size: 1.5rem; color: #aaa; font-weight: bold; text-shadow: 1px 1px 0px rgba(0,0,0,0.5); text-transform: uppercase;}
         #ammo-counter { position: absolute; bottom: 30px; right: 40px; font-size: 2.5rem; color: white; font-weight: bold; text-shadow: 2px 2px 0px rgba(0,0,0,0.5); pointer-events: none; transition: opacity 0.2s; }
 
@@ -96,6 +99,8 @@
             <button id="save-map-btn" class="btn" style="background:#00ffcc; color:#000; margin-top:15px;">Download Map</button>
         </div>
     </div>
+
+    <div id="ads-center-marker"></div>
 
     <div id="dev-config">
         <h3>Weapon Config</h3>
@@ -416,13 +421,6 @@
         const markerGeo = new THREE.SphereGeometry(0.015, 8, 8);
         const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
 
-        const adsMarkerGeo = new THREE.SphereGeometry(0.005, 8, 8);
-        const adsMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
-        const adsMarker = new THREE.Mesh(adsMarkerGeo, adsMarkerMat);
-        adsMarker.position.set(0, 0, -0.5); 
-        adsMarker.visible = false; 
-        camera.add(adsMarker);
-
         function attachFlash(group, zPos, yPos = 0.04) {
             const fSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, blending: THREE.AdditiveBlending, transparent: true, opacity: 0 }));
             fSprite.scale.set(0.4, 0.4, 0.4); fSprite.position.set(0, yPos, zPos); 
@@ -684,11 +682,13 @@
                 controls.unlock();
                 configUI.style.display = 'block';
                 if (refMarker) refMarker.visible = true;
-                adsMarker.visible = true;
+                
+                // Reveal the 2D HTML center dot overlay
+                document.getElementById('ads-center-marker').style.display = 'block';
                 
                 if (gunGroup) {
                     gunGroup.traverse((child) => {
-                        if (child.isMesh && child.geometry !== markerGeo && child.geometry !== adsMarkerGeo) {
+                        if (child.isMesh && child.geometry !== markerGeo) {
                             if (child.material) {
                                 child.userData.origTransparent = child.material.transparent;
                                 child.userData.origOpacity = child.material.opacity;
@@ -702,11 +702,13 @@
             } else {
                 configUI.style.display = 'none';
                 if (refMarker) refMarker.visible = false;
-                adsMarker.visible = false;
+                
+                // Hide 2D HTML center dot overlay
+                document.getElementById('ads-center-marker').style.display = 'none';
                 
                 if (gunGroup) {
                     gunGroup.traverse((child) => {
-                        if (child.isMesh && child.geometry !== markerGeo && child.geometry !== adsMarkerGeo) {
+                        if (child.isMesh && child.geometry !== markerGeo) {
                             if (child.material) {
                                 child.material.transparent = child.userData.origTransparent || false;
                                 child.material.opacity = child.userData.origOpacity || 1.0;
@@ -1186,7 +1188,7 @@
             document.getElementById('ch-left').style.transform = `translateX(-${currentCrosshairSpread}px)`;
             document.getElementById('ch-right').style.transform = `translateX(${currentCrosshairSpread}px)`;
             
-            document.getElementById('crosshair').style.opacity = (isAiming && !currentWeapon.isMelee) ? '0' : '0.8';
+            document.getElementById('crosshair').style.opacity = '0.8';
 
             const targetFov = isAiming ? currentWeapon.adsFov : 75;
             camera.fov += (targetFov - camera.fov) * 0.2;
