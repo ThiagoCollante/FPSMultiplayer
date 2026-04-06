@@ -887,7 +887,6 @@
         }
 
         function getSprayNDC(index) {
-            // Restore original spray/stray logic exactly
             const moveError = isMoving ? 0.1 : 0;
             const moveOffsetX = isMoving ? (Math.random() - 0.5) * moveError : 0;
             const moveOffsetY = isMoving ? (Math.random() - 0.5) * moveError : 0;
@@ -1187,7 +1186,6 @@
             document.getElementById('ch-left').style.transform = `translateX(-${currentCrosshairSpread}px)`;
             document.getElementById('ch-right').style.transform = `translateX(${currentCrosshairSpread}px)`;
             
-            // Revert crosshair visibility fix
             document.getElementById('crosshair').style.opacity = (isAiming && !currentWeapon.isMelee) ? '0' : '0.8';
 
             const targetFov = isAiming ? currentWeapon.adsFov : 75;
