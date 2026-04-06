@@ -34,11 +34,12 @@
         #current-obj-name { font-weight: bold; color: #fff; font-size: 1.2rem; }
 
         /* Dev Config UI */
-        #dev-config { position: absolute; top: 20px; right: 20px; background: rgba(15, 20, 25, 0.95); padding: 20px; border-radius: 8px; border: 1px solid #444; color: white; display: none; z-index: 50; width: 300px; pointer-events: auto; }
+        #dev-config { position: absolute; top: 20px; right: 20px; background: rgba(15, 20, 25, 0.95); padding: 20px; border-radius: 8px; border: 1px solid #444; color: white; display: none; z-index: 50; width: 320px; pointer-events: auto; }
         #dev-config h3 { margin-top: 0; color: #00ffcc; text-transform: uppercase; font-size: 1.2rem; }
         .slider-group { margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
         .slider-group label { font-size: 0.9rem; font-family: monospace; }
-        .slider-group input { width: 150px; }
+        .slider-group input[type="range"] { width: 130px; }
+        .slider-group input[type="number"] { width: 60px; background: #222; color: #fff; border: 1px solid #444; border-radius: 3px; padding: 3px 5px; outline: none; font-family: monospace; }
         #config-log-btn { background: #ff4655; color: white; border: none; padding: 10px; width: 100%; cursor: pointer; font-weight: bold; border-radius: 4px; margin-top: 15px; }
         #config-log-btn:hover { background: #ff5866; }
 
@@ -98,12 +99,12 @@
 
     <div id="dev-config">
         <h3>Weapon Config</h3>
-        <p style="font-size: 0.8rem; color: #aaa; margin-bottom:15px;">Hold Right-Click to test ADS while adjusting sliders. Red sphere is muzzle, Green sphere is center screen.</p>
-        <div class="slider-group"><label>ADS X</label><input type="range" id="c-ads-x" min="-1" max="1" step="0.005" value="0"></div>
-        <div class="slider-group"><label>ADS Y</label><input type="range" id="c-ads-y" min="-1" max="1" step="0.005" value="-0.105"></div>
-        <div class="slider-group"><label>ADS Z</label><input type="range" id="c-ads-z" min="-1" max="1" step="0.005" value="-0.25"></div>
-        <div class="slider-group"><label>Muz Y</label><input type="range" id="c-muz-y" min="-1" max="1" step="0.005" value="0.06"></div>
-        <div class="slider-group"><label>Muz Z</label><input type="range" id="c-muz-z" min="-2" max="1" step="0.005" value="-0.365"></div>
+        <p style="font-size: 0.8rem; color: #aaa; margin-bottom:15px;">Hold Right-Click to test ADS. Red sphere is muzzle, Green sphere is center screen.</p>
+        <div class="slider-group"><label>ADS X</label><input type="range" id="c-ads-x" min="-1" max="1" step="0.001" value="0"><input type="number" id="c-ads-x-num" step="0.001" value="0"></div>
+        <div class="slider-group"><label>ADS Y</label><input type="range" id="c-ads-y" min="-1" max="1" step="0.001" value="-0.105"><input type="number" id="c-ads-y-num" step="0.001" value="-0.105"></div>
+        <div class="slider-group"><label>ADS Z</label><input type="range" id="c-ads-z" min="-1" max="1" step="0.001" value="-0.25"><input type="number" id="c-ads-z-num" step="0.001" value="-0.25"></div>
+        <div class="slider-group"><label>Muz Y</label><input type="range" id="c-muz-y" min="-1" max="1" step="0.001" value="0.06"><input type="number" id="c-muz-y-num" step="0.001" value="0.06"></div>
+        <div class="slider-group"><label>Muz Z</label><input type="range" id="c-muz-z" min="-2" max="1" step="0.001" value="-0.365"><input type="number" id="c-muz-z-num" step="0.001" value="-0.365"></div>
         <button id="config-log-btn">Log Data to Console</button>
     </div>
 
@@ -415,10 +416,10 @@
         const markerGeo = new THREE.SphereGeometry(0.015, 8, 8);
         const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
 
-        const adsMarkerGeo = new THREE.SphereGeometry(0.0015, 8, 8);
+        const adsMarkerGeo = new THREE.SphereGeometry(0.005, 8, 8);
         const adsMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
         const adsMarker = new THREE.Mesh(adsMarkerGeo, adsMarkerMat);
-        adsMarker.position.set(0, 0, -0.1); 
+        adsMarker.position.set(0, 0, -0.5); 
         adsMarker.visible = false; 
         camera.add(adsMarker);
 
@@ -495,11 +496,17 @@
             }
 
             document.getElementById('c-ads-x').value = currentWeapon.adsPos.x;
+            document.getElementById('c-ads-x-num').value = currentWeapon.adsPos.x;
             document.getElementById('c-ads-y').value = currentWeapon.adsPos.y;
+            document.getElementById('c-ads-y-num').value = currentWeapon.adsPos.y;
             document.getElementById('c-ads-z').value = currentWeapon.adsPos.z;
+            document.getElementById('c-ads-z-num').value = currentWeapon.adsPos.z;
+            
             if (!currentWeapon.isMelee) {
                 document.getElementById('c-muz-y').value = currentWeapon.flashY;
+                document.getElementById('c-muz-y-num').value = currentWeapon.flashY;
                 document.getElementById('c-muz-z').value = currentWeapon.flashZ;
+                document.getElementById('c-muz-z-num').value = currentWeapon.flashZ;
             }
 
             camera.add(gunGroup);
@@ -632,23 +639,32 @@
         const configUI = document.getElementById('dev-config');
         
         ['x', 'y', 'z'].forEach(axis => {
-            document.getElementById(`c-ads-${axis}`).addEventListener('input', (e) => {
-                currentWeapon.adsPos[axis] = parseFloat(e.target.value);
-            });
+            const updateAds = (val) => {
+                const v = parseFloat(val) || 0;
+                currentWeapon.adsPos[axis] = v;
+                document.getElementById(`c-ads-${axis}`).value = v;
+                document.getElementById(`c-ads-${axis}-num`).value = v;
+            };
+            document.getElementById(`c-ads-${axis}`).addEventListener('input', (e) => updateAds(e.target.value));
+            document.getElementById(`c-ads-${axis}-num`).addEventListener('input', (e) => updateAds(e.target.value));
         });
 
         ['y', 'z'].forEach(axis => {
-            document.getElementById(`c-muz-${axis}`).addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                if (axis === 'y') currentWeapon.flashY = val;
-                if (axis === 'z') currentWeapon.flashZ = val;
+            const updateMuz = (val) => {
+                const v = parseFloat(val) || 0;
+                if (axis === 'y') currentWeapon.flashY = v;
+                if (axis === 'z') currentWeapon.flashZ = v;
+                document.getElementById(`c-muz-${axis}`).value = v;
+                document.getElementById(`c-muz-${axis}-num`).value = v;
                 
                 if (flashSprite && refMarker && flashLight) {
                     flashSprite.position.set(0, currentWeapon.flashY, currentWeapon.flashZ);
                     flashLight.position.set(0, currentWeapon.flashY, currentWeapon.flashZ);
                     refMarker.position.set(0, currentWeapon.flashY, currentWeapon.flashZ);
                 }
-            });
+            };
+            document.getElementById(`c-muz-${axis}`).addEventListener('input', (e) => updateMuz(e.target.value));
+            document.getElementById(`c-muz-${axis}-num`).addEventListener('input', (e) => updateMuz(e.target.value));
         });
 
         document.getElementById('config-log-btn').addEventListener('click', () => {
@@ -871,9 +887,6 @@
         }
 
         function getSprayNDC(index) {
-            // Perfect accuracy when aiming
-            if (isAiming) return new THREE.Vector2(0, 0);
-
             const moveError = isMoving ? 0.1 : 0;
             const moveOffsetX = isMoving ? (Math.random() - 0.5) * moveError : 0;
             const moveOffsetY = isMoving ? (Math.random() - 0.5) * moveError : 0;
@@ -881,13 +894,15 @@
             if (currentWeapon.isMelee) return new THREE.Vector2(0,0); 
             if (currentWeapon.name === "Shotgun") return new THREE.Vector2(((Math.random() - 0.5) * 0.15) + moveOffsetX, ((Math.random() - 0.5) * 0.15) + moveOffsetY);
             if (currentWeapon.name === "Sniper Rifle") {
-                return new THREE.Vector2(((Math.random() - 0.5) * 0.3) + moveOffsetX, ((Math.random() - 0.5) * 0.3) + moveOffsetY); 
+                if (!isAiming) return new THREE.Vector2(((Math.random() - 0.5) * 0.3) + moveOffsetX, ((Math.random() - 0.5) * 0.3) + moveOffsetY);
+                return new THREE.Vector2(moveOffsetX, moveOffsetY); 
             }
             
             let x = 0, y = 0;
             y = Math.min(index * 0.007, 0.055);
             if (index > 4) x = Math.sin((index - 4) * 0.4) * Math.min((index - 4) * 0.003, 0.035);
-            return new THREE.Vector2(x + moveOffsetX, y + moveOffsetY);
+            const multiplier = isAiming ? 0.4 : 1.0;
+            return new THREE.Vector2((x * multiplier) + moveOffsetX, (y * multiplier) + moveOffsetY);
         }
 
         function fireWeapon() {
@@ -930,7 +945,6 @@
                 const intersects = raycaster.intersectObjects(hitTargets, true);
                 let hitData = null;
 
-                // Accurate hitbox detection (ignores weapons)
                 for (let i = 0; i < intersects.length; i++) {
                     let hitObj = intersects[i].object;
                     if (hitObj === floor || envGroup.children.includes(hitObj) || customObjGroup.children.includes(hitObj)) {
@@ -1172,7 +1186,6 @@
             document.getElementById('ch-left').style.transform = `translateX(-${currentCrosshairSpread}px)`;
             document.getElementById('ch-right').style.transform = `translateX(${currentCrosshairSpread}px)`;
             
-            // Keep crosshair visible when aiming
             document.getElementById('crosshair').style.opacity = '0.8';
 
             const targetFov = isAiming ? currentWeapon.adsFov : 75;
