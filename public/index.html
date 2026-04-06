@@ -161,7 +161,6 @@
 
         const socket = io(); 
 
-        // Request available rooms instantly to populate the menu
         socket.emit('requestRoomList');
 
         // --- SCENE SETUP ---
@@ -328,7 +327,6 @@
             
             if (isMapEditorMode) {
                 if (gunGroup) gunGroup.visible = false;
-                document.getElementById('crosshair').style.opacity = '1';
                 velocity.set(0, 0, 0); 
                 updateEditorPreview();
             } else {
@@ -396,7 +394,6 @@
             }
         });
 
-        // Dynamic Map List Loading
         socket.on('mapList', (maps) => {
             const select = document.getElementById('map-select');
             select.innerHTML = '';
@@ -559,11 +556,13 @@
             const pMat = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.6, metalness: 0.1 });
             
             const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.4), pMat);
-            body.position.y = 0.6; body.castShadow = true; body.userData.isHead = false; 
+            body.position.y = 0.6; body.castShadow = true; 
+            body.userData.isHead = false; 
             pGroup.add(body);
             
             const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), pMat);
-            head.position.y = 1.45; head.castShadow = true; head.userData.isHead = true; 
+            head.position.y = 1.45; head.castShadow = true; 
+            head.userData.isHead = true; 
             pGroup.add(head);
 
             const weaponPivot = new THREE.Group();
@@ -872,6 +871,9 @@
         }
 
         function getSprayNDC(index) {
+            // Perfect accuracy when aiming
+            if (isAiming) return new THREE.Vector2(0, 0);
+
             const moveError = isMoving ? 0.1 : 0;
             const moveOffsetX = isMoving ? (Math.random() - 0.5) * moveError : 0;
             const moveOffsetY = isMoving ? (Math.random() - 0.5) * moveError : 0;
@@ -879,15 +881,13 @@
             if (currentWeapon.isMelee) return new THREE.Vector2(0,0); 
             if (currentWeapon.name === "Shotgun") return new THREE.Vector2(((Math.random() - 0.5) * 0.15) + moveOffsetX, ((Math.random() - 0.5) * 0.15) + moveOffsetY);
             if (currentWeapon.name === "Sniper Rifle") {
-                if (!isAiming) return new THREE.Vector2(((Math.random() - 0.5) * 0.3) + moveOffsetX, ((Math.random() - 0.5) * 0.3) + moveOffsetY);
-                return new THREE.Vector2(moveOffsetX, moveOffsetY); 
+                return new THREE.Vector2(((Math.random() - 0.5) * 0.3) + moveOffsetX, ((Math.random() - 0.5) * 0.3) + moveOffsetY); 
             }
             
             let x = 0, y = 0;
             y = Math.min(index * 0.007, 0.055);
             if (index > 4) x = Math.sin((index - 4) * 0.4) * Math.min((index - 4) * 0.003, 0.035);
-            const multiplier = isAiming ? 0.4 : 1.0;
-            return new THREE.Vector2((x * multiplier) + moveOffsetX, (y * multiplier) + moveOffsetY);
+            return new THREE.Vector2(x + moveOffsetX, y + moveOffsetY);
         }
 
         function fireWeapon() {
@@ -928,19 +928,34 @@
                 for (let id in players) { hitTargets.push(players[id]); }
 
                 const intersects = raycaster.intersectObjects(hitTargets, true);
+                let hitData = null;
+
+                // Accurate hitbox detection (ignores weapons)
+                for (let i = 0; i < intersects.length; i++) {
+                    let hitObj = intersects[i].object;
+                    if (hitObj === floor || envGroup.children.includes(hitObj) || customObjGroup.children.includes(hitObj)) {
+                        hitData = intersects[i];
+                        break;
+                    }
+                    if (hitObj.userData.isHead !== undefined) {
+                        hitData = intersects[i];
+                        break;
+                    }
+                }
+
                 let hitPoint;
 
-                if (intersects.length > 0) {
-                    if (currentWeapon.isMelee && intersects[0].distance > currentWeapon.range) continue;
+                if (hitData) {
+                    if (currentWeapon.isMelee && hitData.distance > currentWeapon.range) continue;
 
-                    hitPoint = intersects[0].point;
-                    let hitObject = intersects[0].object;
+                    hitPoint = hitData.point;
+                    let hitObject = hitData.object;
                     let isHeadshot = hitObject.userData.isHead === true; 
 
                     let rootObject = hitObject;
 
                     if (rootObject === floor || envGroup.children.includes(rootObject) || customObjGroup.children.includes(rootObject)) { 
-                        createDecal(intersects[0], currentWeapon.isMelee); 
+                        createDecal(hitData, currentWeapon.isMelee); 
                     } else {
                         while (rootObject.parent && rootObject.userData.id === undefined) rootObject = rootObject.parent;
                         if (rootObject.userData.id) {
@@ -1157,7 +1172,8 @@
             document.getElementById('ch-left').style.transform = `translateX(-${currentCrosshairSpread}px)`;
             document.getElementById('ch-right').style.transform = `translateX(${currentCrosshairSpread}px)`;
             
-            document.getElementById('crosshair').style.opacity = (isAiming && !currentWeapon.isMelee) ? '0' : '0.8';
+            // Keep crosshair visible when aiming
+            document.getElementById('crosshair').style.opacity = '0.8';
 
             const targetFov = isAiming ? currentWeapon.adsFov : 75;
             camera.fov += (targetFov - camera.fov) * 0.2;
